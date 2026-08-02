@@ -1,0 +1,135 @@
+@page "/consultation/{Id:int}"
+@inject LignageApp.ViewModels.ConsultationViewModel ViewModel
+@inject IJSRuntime JS
+@implements IDisposable
+@rendermode InteractiveServer
+
+<div style="display:flex">
+    <div style="flex:1">
+        <button @onclick="ViewModel.Retour" disabled="@(!ViewModel.PeutRevenirEnArriere)">← Retour</button>
+        <button @onclick="ViewModel.ToggleHistorique">Historique</button>
+        <button @onclick="ToggleGraphe">@(GrapheVisible ? "Masquer Graphe" : "Afficher Graphe")</button>
+        <h3 title="@ViewModel.NoeudActuel">Lignage du noeud : @Tronquer(ViewModel.NoeudActuel, 50)</h3>
+
+        @if (ViewModel.Programme != null)
+        {
+            <div style="margin-bottom:15px; padding:10px; background:#f5f5f5; border-radius:5px">
+                <strong>Programme :</strong> @ViewModel.Programme.Programme<br/>
+                <strong>Version :</strong> @ViewModel.Programme.Version
+            </div>
+        }
+
+        @if (GrapheVisible)
+        {
+            <div id="graphe-container" style="width:100%; height:400px; border:1px solid #ccc; margin-bottom:20px;"></div>
+        }
+
+        <h4>Successeurs</h4>
+        <table class="table">
+            <thead><tr><th>Noeud</th><th>Transformation</th></tr></thead>
+            <tbody>
+                @foreach (var s in ViewModel.Successeurs)
+                {
+                    <tr @onclick="() => ViewModel.NaviguerVersAsync(s.Id)" style="cursor:pointer">
+                        <td title="@s.Noeud">@Tronquer(s.Noeud, 50)</td><td>@s.Transformation</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h4>Predecesseurs</h4>
+        <table class="table">
+            <thead><tr><th>Noeud</th><th>Transformation</th></tr></thead>
+            <tbody>
+                @foreach (var p in ViewModel.Predecesseurs)
+                {
+                    <tr @onclick="() => ViewModel.NaviguerVersAsync(p.Id)" style="cursor:pointer">
+                        <td title="@p.Noeud">@Tronquer(p.Noeud, 50)</td><td>@p.Transformation</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (ViewModel.DrawerOuvert)
+    {
+        <div style="width:250px; border-left:1px solid #ccc; padding:10px">
+            <div style="display:flex; justify-content:space-between">
+                <strong>Historique</strong>
+                <button @onclick="ViewModel.ToggleHistorique">X</button>
+            </div>
+            <ul style="list-style:none; padding:0">
+                @foreach (var entry in ViewModel.Historique)
+                {
+                    <li @onclick="() => ViewModel.RevenirA(entry.Id)" style="cursor:pointer; padding:5px" title="@entry.Noeud">
+                        @Tronquer(entry.Noeud, 25)
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private bool GrapheVisible { get; set; } = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ViewModel.InitialiserParIdAsync(Id);
+        if (GrapheVisible)
+        {
+            await RenderGraphe();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        ViewModel.PropertyChanged += OnChanged;
+    }
+
+    private async void OnChanged(object? sender, EventArgs e)
+    {
+        await InvokeAsync(StateHasChanged);
+        if (GrapheVisible)
+        {
+            await Task.Delay(100); // Attendre le rendu du DOM
+            await RenderGraphe();
+        }
+    }
+
+    private async Task ToggleGraphe()
+    {
+        GrapheVisible = !GrapheVisible;
+        if (GrapheVisible)
+        {
+            await Task.Delay(100); // Attendre le rendu du DOM
+            await RenderGraphe();
+        }
+    }
+
+    private async Task RenderGraphe()
+    {
+        var data = new
+        {
+            noeudActuel = ViewModel.NoeudActuel,
+            successeurs = ViewModel.Successeurs.Select(s => new { noeud = s.Noeud, id = s.Id }).ToList(),
+            predecesseurs = ViewModel.Predecesseurs.Select(p => new { noeud = p.Noeud, id = p.Id }).ToList(),
+            historique = ViewModel.Historique.Select(h => new { noeud = h.Noeud, id = h.Id }).ToList()
+        };
+
+        await JS.InvokeVoidAsync("lignageGraph.render", "graphe-container", data);
+    }
+
+    private string Tronquer(string texte, int max)
+    {
+        if (string.IsNullOrEmpty(texte) || texte.Length <= max)
+            return texte;
+        return texte.Substring(0, max) + "...";
+    }
+
+    public void Dispose()
+    {
+        ViewModel.PropertyChanged -= OnChanged;
+    }
+}
