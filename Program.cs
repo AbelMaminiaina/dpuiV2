@@ -9,21 +9,21 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Cache en mémoire
+// Memory cache
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheService, CacheService>();
 
-// Repository avec cache
+// Repository with cache
 builder.Services.AddScoped<LignageRepository>();
 builder.Services.AddScoped<ILignageRepository, CachedLignageRepository>();
 
 // Services
 builder.Services.AddScoped<NavigationSession>();
-builder.Services.AddScoped<INoeudsService, NoeudsService>();
+builder.Services.AddScoped<INodesService, NodesService>();
 builder.Services.AddScoped<IConsultationService, ConsultationService>();
 
 // ViewModels
-builder.Services.AddScoped<NoeudsListViewModel>();
+builder.Services.AddScoped<NodesListViewModel>();
 builder.Services.AddScoped<ConsultationViewModel>();
 
 var app = builder.Build();

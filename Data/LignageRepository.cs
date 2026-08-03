@@ -13,116 +13,144 @@ public class LignageRepository : ILignageRepository
         _connectionString = configuration.GetConnectionString("LignageDb2") ?? string.Empty;
     }
 
-    public async Task<List<NoeudDto>> GetNoeudsDistinctsAsync()
+    // SQL helper to concatenate fields with '.' (compatible SQL Server 2014+)
+    private const string ConcatDta = @"STUFF(
+        CASE WHEN DTA_1 IS NOT NULL AND DTA_1 <> '' THEN '.' + DTA_1 ELSE '' END +
+        CASE WHEN DTA_2 IS NOT NULL AND DTA_2 <> '' THEN '.' + DTA_2 ELSE '' END +
+        CASE WHEN DTA_3 IS NOT NULL AND DTA_3 <> '' THEN '.' + DTA_3 ELSE '' END +
+        CASE WHEN DTA_4 IS NOT NULL AND DTA_4 <> '' THEN '.' + DTA_4 ELSE '' END,
+        1, 1, '')";
+
+    private const string ConcatEdg = @"STUFF(
+        CASE WHEN EDG_1 IS NOT NULL AND EDG_1 <> '' THEN '.' + EDG_1 ELSE '' END +
+        CASE WHEN EDG_2 IS NOT NULL AND EDG_2 <> '' THEN '.' + EDG_2 ELSE '' END +
+        CASE WHEN EDG_3 IS NOT NULL AND EDG_3 <> '' THEN '.' + EDG_3 ELSE '' END +
+        CASE WHEN EDG_4 IS NOT NULL AND EDG_4 <> '' THEN '.' + EDG_4 ELSE '' END,
+        1, 1, '')";
+
+    public async Task<List<NodeDto>> GetDistinctNodesAsync()
     {
-        const string sql = @"
-            WITH NoeudsAvecPK AS (
+        // Concatenate DTA_1-4 with '.' to create the full node
+        string sql = $@"
+            WITH NodesWithPK AS (
                 SELECT
-                    noeuds1 AS Noeud,
-                    lna_uid AS LnaUid,
-                    lin_uid AS LinUid,
-                    edg_dir AS EdgDir,
-                    ROW_NUMBER() OVER (PARTITION BY noeuds1 ORDER BY lna_uid, lin_uid) AS rn
-                FROM table1
+                    {ConcatDta} AS Node,
+                    LAN_UID AS LanUid,
+                    LIN_UID AS LinUid,
+                    EDG_DIR AS EdgDir,
+                    ROW_NUMBER() OVER (PARTITION BY {ConcatDta} ORDER BY LAN_UID, LIN_UID) AS rn
+                FROM LINE_VIS_EDG
             )
             SELECT
-                LnaUid + '|' + LinUid + '|' + EdgDir AS Id,
-                Noeud
-            FROM NoeudsAvecPK
+                LanUid + '|' + LinUid + '|' + EdgDir AS Id,
+                Node
+            FROM NodesWithPK
             WHERE rn = 1
-            ORDER BY Noeud;";
+            ORDER BY Node;";
 
         using var connection = new SqlConnection(_connectionString);
-        var result = await connection.QueryAsync<NoeudDto>(sql);
+        var result = await connection.QueryAsync<NodeDto>(sql);
         return result.ToList();
     }
 
-    public async Task<LignageRow?> GetByPKAsync(string lnaUid, string linUid, string edgDir)
+    public async Task<LignageRow?> GetByPKAsync(string lanUid, string linUid, string edgDir)
     {
         const string sql = @"
             SELECT
-                lna_uid AS LnaUid,
-                lin_uid AS LinUid,
-                edg_dir AS EdgDir,
-                noeuds1 AS Noeuds1,
-                noeuds1lie AS Noeuds1Lie,
-                transformation AS Transformation
-            FROM table1
-            WHERE lna_uid = @LnaUid AND lin_uid = @LinUid AND edg_dir = @EdgDir;";
+                LAN_UID AS LanUid,
+                LIN_UID AS LinUid,
+                EDG_DIR AS EdgDir,
+                DTA_1 AS Dta1,
+                DTA_2 AS Dta2,
+                DTA_3 AS Dta3,
+                DTA_4 AS Dta4,
+                EDG_1 AS Edg1,
+                EDG_2 AS Edg2,
+                EDG_3 AS Edg3,
+                EDG_4 AS Edg4,
+                TXN_TRI AS TxnTri
+            FROM LINE_VIS_EDG
+            WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir;";
 
         using var connection = new SqlConnection(_connectionString);
         return await connection.QueryFirstOrDefaultAsync<LignageRow>(sql,
-            new { LnaUid = lnaUid, LinUid = linUid, EdgDir = edgDir });
+            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir });
     }
 
-    public async Task<List<LignageDto>> GetSuccesseursAsync(string lnaUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir)
     {
-        // Optimisé: une seule requête avec JOIN
-        const string sql = @"
-            WITH NoeudActuel AS (
-                SELECT noeuds1 FROM table1
-                WHERE lna_uid = @LnaUid AND lin_uid = @LinUid AND edg_dir = @EdgDir
+        // Compare 4 columns DTA_1-4 with EDG_1-4 to find successors
+        string sql = $@"
+            WITH CurrentNode AS (
+                SELECT DTA_1, DTA_2, DTA_3, DTA_4
+                FROM LINE_VIS_EDG
+                WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir
             )
+            -- EDG_DIR='I': DTA is predecessor of EDG, so EDG is successor
             SELECT
-                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
-                t.noeuds1lie AS Noeud,
-                t.transformation AS Transformation
-            FROM table1 t
-            INNER JOIN NoeudActuel n ON t.noeuds1 = n.noeuds1
-            WHERE t.edg_dir = 'I'
+                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
+                {ConcatEdg.Replace("EDG_", "t.EDG_")} AS Node,
+                t.TXN_TRI AS Transformation
+            FROM LINE_VIS_EDG t
+            INNER JOIN CurrentNode n ON ISNULL(t.DTA_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.DTA_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.DTA_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.DTA_4,'') = ISNULL(n.DTA_4,'')
+            WHERE t.EDG_DIR = 'I'
             UNION
+            -- EDG_DIR='O': EDG is predecessor of DTA, so DTA is successor
             SELECT
-                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
-                t.noeuds1 AS Noeud,
-                t.transformation AS Transformation
-            FROM table1 t
-            INNER JOIN NoeudActuel n ON t.noeuds1lie = n.noeuds1
-            WHERE t.edg_dir = 'O';";
+                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
+                {ConcatDta.Replace("DTA_", "t.DTA_")} AS Node,
+                t.TXN_TRI AS Transformation
+            FROM LINE_VIS_EDG t
+            INNER JOIN CurrentNode n ON ISNULL(t.EDG_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.EDG_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.EDG_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.EDG_4,'') = ISNULL(n.DTA_4,'')
+            WHERE t.EDG_DIR = 'O';";
 
         using var connection = new SqlConnection(_connectionString);
-        var result = await connection.QueryAsync<LignageDto>(sql,
-            new { LnaUid = lnaUid, LinUid = linUid, EdgDir = edgDir });
+        var result = await connection.QueryAsync<LineageDto>(sql,
+            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir });
         return result.ToList();
     }
 
-    public async Task<List<LignageDto>> GetPredecesseursAsync(string lnaUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir)
     {
-        // Optimisé: une seule requête avec JOIN
-        const string sql = @"
-            WITH NoeudActuel AS (
-                SELECT noeuds1 FROM table1
-                WHERE lna_uid = @LnaUid AND lin_uid = @LinUid AND edg_dir = @EdgDir
+        // Compare 4 columns DTA_1-4 with EDG_1-4 to find predecessors
+        string sql = $@"
+            WITH CurrentNode AS (
+                SELECT DTA_1, DTA_2, DTA_3, DTA_4
+                FROM LINE_VIS_EDG
+                WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir
             )
+            -- EDG_DIR='O': EDG is predecessor of DTA, so if DTA=node, EDG is predecessor
             SELECT
-                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
-                t.noeuds1lie AS Noeud,
-                t.transformation AS Transformation
-            FROM table1 t
-            INNER JOIN NoeudActuel n ON t.noeuds1 = n.noeuds1
-            WHERE t.edg_dir = 'O'
+                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
+                {ConcatEdg.Replace("EDG_", "t.EDG_")} AS Node,
+                t.TXN_TRI AS Transformation
+            FROM LINE_VIS_EDG t
+            INNER JOIN CurrentNode n ON ISNULL(t.DTA_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.DTA_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.DTA_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.DTA_4,'') = ISNULL(n.DTA_4,'')
+            WHERE t.EDG_DIR = 'O'
             UNION
+            -- EDG_DIR='I': DTA is predecessor of EDG, so if EDG=node, DTA is predecessor
             SELECT
-                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
-                t.noeuds1 AS Noeud,
-                t.transformation AS Transformation
-            FROM table1 t
-            INNER JOIN NoeudActuel n ON t.noeuds1lie = n.noeuds1
-            WHERE t.edg_dir = 'I';";
+                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
+                {ConcatDta.Replace("DTA_", "t.DTA_")} AS Node,
+                t.TXN_TRI AS Transformation
+            FROM LINE_VIS_EDG t
+            INNER JOIN CurrentNode n ON ISNULL(t.EDG_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.EDG_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.EDG_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.EDG_4,'') = ISNULL(n.DTA_4,'')
+            WHERE t.EDG_DIR = 'I';";
 
         using var connection = new SqlConnection(_connectionString);
-        var result = await connection.QueryAsync<LignageDto>(sql,
-            new { LnaUid = lnaUid, LinUid = linUid, EdgDir = edgDir });
+        var result = await connection.QueryAsync<LineageDto>(sql,
+            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir });
         return result.ToList();
     }
 
-    public async Task<ProgrammeDto?> GetProgrammeAsync(string lnaUid)
+    public async Task<ProgramDto?> GetProgramAsync(string lanUid)
     {
         const string sql = @"
-            SELECT programme AS Programme, version AS Version
+            SELECT programme AS Program, version AS Version
             FROM table2
-            WHERE lna_uid = @LnaUid;";
+            WHERE lna_uid = @LanUid;";
 
         using var connection = new SqlConnection(_connectionString);
-        return await connection.QueryFirstOrDefaultAsync<ProgrammeDto>(sql, new { LnaUid = lnaUid });
+        return await connection.QueryFirstOrDefaultAsync<ProgramDto>(sql, new { LanUid = lanUid });
     }
 }

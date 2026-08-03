@@ -4,78 +4,78 @@ namespace LignageApp.Services;
 
 public class NavigationSession
 {
-    private readonly List<HistoriqueEntry> _historiqueNavigation = new();
-    private int _indexActuel = -1;
+    private readonly List<HistoryEntry> _navigationHistory = new();
+    private int _currentIndex = -1;
 
-    public string IdActuel { get; set; } = string.Empty;  // Format: LnaUid_LinUid_EdgDir
-    public string NoeudActuel { get; set; } = string.Empty;
+    public string CurrentId { get; set; } = string.Empty;  // Format: LanUid|LinUid|EdgDir
+    public string CurrentNode { get; set; } = string.Empty;
 
-    public void Ajouter(HistoriqueEntry entree)
+    public void Add(HistoryEntry entry)
     {
-        if (_indexActuel < _historiqueNavigation.Count - 1)
+        if (_currentIndex < _navigationHistory.Count - 1)
         {
-            _historiqueNavigation.RemoveRange(_indexActuel + 1, _historiqueNavigation.Count - _indexActuel - 1);
+            _navigationHistory.RemoveRange(_currentIndex + 1, _navigationHistory.Count - _currentIndex - 1);
         }
-        _historiqueNavigation.Add(entree);
-        _indexActuel = _historiqueNavigation.Count - 1;
+        _navigationHistory.Add(entry);
+        _currentIndex = _navigationHistory.Count - 1;
     }
 
-    public HistoriqueEntry? Precedent()
+    public HistoryEntry? Previous()
     {
-        if (_indexActuel > 0)
+        if (_currentIndex > 0)
         {
-            _indexActuel--;
-            return _historiqueNavigation[_indexActuel];
-        }
-        return null;
-    }
-
-    public HistoriqueEntry? PrecedentAvecSuppression()
-    {
-        if (_historiqueNavigation.Count > 1)
-        {
-            _historiqueNavigation.RemoveAt(_historiqueNavigation.Count - 1);
-            _indexActuel = _historiqueNavigation.Count - 1;
-            return _historiqueNavigation[_indexActuel];
+            _currentIndex--;
+            return _navigationHistory[_currentIndex];
         }
         return null;
     }
 
-    public HistoriqueEntry? Suivant()
+    public HistoryEntry? PreviousWithRemove()
     {
-        if (_indexActuel < _historiqueNavigation.Count - 1)
+        if (_navigationHistory.Count > 1)
         {
-            _indexActuel++;
-            return _historiqueNavigation[_indexActuel];
+            _navigationHistory.RemoveAt(_navigationHistory.Count - 1);
+            _currentIndex = _navigationHistory.Count - 1;
+            return _navigationHistory[_currentIndex];
         }
         return null;
     }
 
-    public HistoriqueEntry? Consulter() =>
-        _indexActuel >= 0 && _indexActuel < _historiqueNavigation.Count
-            ? _historiqueNavigation[_indexActuel]
+    public HistoryEntry? Next()
+    {
+        if (_currentIndex < _navigationHistory.Count - 1)
+        {
+            _currentIndex++;
+            return _navigationHistory[_currentIndex];
+        }
+        return null;
+    }
+
+    public HistoryEntry? Current() =>
+        _currentIndex >= 0 && _currentIndex < _navigationHistory.Count
+            ? _navigationHistory[_currentIndex]
             : null;
 
-    public bool PeutRevenirEnArriere => _indexActuel > 0;
-    public bool PeutAllerEnAvant => _indexActuel < _historiqueNavigation.Count - 1;
+    public bool CanGoBack => _currentIndex > 0;
+    public bool CanGoForward => _currentIndex < _navigationHistory.Count - 1;
 
-    public List<HistoriqueEntry> ObtenirHistorique() => _historiqueNavigation.ToList();
+    public List<HistoryEntry> GetHistory() => _navigationHistory.ToList();
 
-    public int IndexActuel => _indexActuel;
+    public int CurrentIndex => _currentIndex;
 
-    public void AllerA(int index)
+    public void GoTo(int index)
     {
-        if (index >= 0 && index < _historiqueNavigation.Count)
+        if (index >= 0 && index < _navigationHistory.Count)
         {
-            _indexActuel = index;
+            _currentIndex = index;
         }
     }
 
-    public void Reinitialiser()
+    public void Reset()
     {
-        _historiqueNavigation.Clear();
-        _indexActuel = -1;
-        IdActuel = string.Empty;
-        NoeudActuel = string.Empty;
+        _navigationHistory.Clear();
+        _currentIndex = -1;
+        CurrentId = string.Empty;
+        CurrentNode = string.Empty;
     }
 }

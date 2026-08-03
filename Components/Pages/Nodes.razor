@@ -1,0 +1,57 @@
+@page "/"
+@page "/nodes"
+@inject LignageApp.ViewModels.NodesListViewModel ViewModel
+@inject NavigationManager Navigation
+@implements IDisposable
+@rendermode InteractiveServer
+
+<h3>Lineage Graph Nodes</h3>
+
+@if (ViewModel.IsLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table">
+        <thead><tr><th>Node</th></tr></thead>
+        <tbody>
+            @foreach (var n in ViewModel.Nodes)
+            {
+                <tr @onclick="() => NavigateToConsultation(n.Id)" style="cursor:pointer">
+                    <td title="@n.Node">@Truncate(n.Node, 50)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        ViewModel.PropertyChanged += OnChanged;
+        await ViewModel.LoadAsync();
+    }
+
+    private void OnChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+
+    private void NavigateToConsultation(string id)
+    {
+        // id is already in format: lanUid|linUid|edgDir
+        // Encode it for URL
+        var encoded = Uri.EscapeDataString(id);
+        Navigation.NavigateTo($"/consultation/{encoded}");
+    }
+
+    private string Truncate(string text, int max)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= max)
+            return text;
+        return text.Substring(0, max) + "...";
+    }
+
+    public void Dispose()
+    {
+        ViewModel.PropertyChanged -= OnChanged;
+    }
+}

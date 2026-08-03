@@ -8,19 +8,19 @@ public class ConsultationViewModel : INotifyPropertyChanged
 {
     private readonly IConsultationService _consultationService;
 
-    public string IdActuel => _consultationService.IdActuel;
-    public string NoeudActuel => _consultationService.NoeudActuel;
-    public List<LignageDto> Successeurs => _consultationService.Successeurs;
-    public List<LignageDto> Predecesseurs => _consultationService.Predecesseurs;
-    public ProgrammeDto? Programme => _consultationService.Programme;
-    public bool PeutRevenirEnArriere => _consultationService.PeutRevenirEnArriere;
-    public bool PeutAllerEnAvant => _consultationService.PeutAllerEnAvant;
-    public List<HistoriqueEntry> Historique => _consultationService.Historique;
-    public int IndexActuel => _consultationService.IndexActuel;
-    public bool DrawerOuvert { get; private set; }
+    public string CurrentId => _consultationService.CurrentId;
+    public string CurrentNode => _consultationService.CurrentNode;
+    public List<LineageDto> Successors => _consultationService.Successors;
+    public List<LineageDto> Predecessors => _consultationService.Predecessors;
+    public ProgramDto? Program => _consultationService.Program;
+    public bool CanGoBack => _consultationService.CanGoBack;
+    public bool CanGoForward => _consultationService.CanGoForward;
+    public List<HistoryEntry> History => _consultationService.History;
+    public int CurrentIndex => _consultationService.CurrentIndex;
+    public bool DrawerOpen { get; private set; }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-    private void Notifier(string? prop = null) =>
+    private void Notify(string? prop = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
 
     public ConsultationViewModel(IConsultationService consultationService)
@@ -28,50 +28,53 @@ public class ConsultationViewModel : INotifyPropertyChanged
         _consultationService = consultationService;
     }
 
-    public async Task InitialiserAsync(string lnaUid, string linUid, string edgDir)
+    public async Task InitializeAsync(string lanUid, string linUid, string edgDir)
     {
-        await _consultationService.InitialiserAsync(lnaUid, linUid, edgDir);
-        Notifier();
+        await _consultationService.InitializeAsync(lanUid, linUid, edgDir);
+        Notify();
     }
 
-    public async Task NaviguerVersAsync(string id)
+    public async Task NavigateToAsync(string id)
     {
-        // id est au format: lnaUid|linUid|edgDir
-        var pk = LignagePK.Parse(id);
-        if (pk != null)
+        // id format: lanUid|linUid|edgDir
+        var parts = id?.Split('|');
+        if (parts != null && parts.Length == 3)
         {
-            await _consultationService.NaviguerVersAsync(pk.LnaUid, pk.LinUid, pk.EdgDir);
-            Notifier();
+            var lanUid = Uri.UnescapeDataString(parts[0]);
+            var linUid = Uri.UnescapeDataString(parts[1]);
+            var edgDir = parts[2];
+            await _consultationService.NavigateToAsync(lanUid, linUid, edgDir);
+            Notify();
         }
     }
 
-    public void Retour()
+    public void GoBack()
     {
-        _consultationService.Retour();
-        Notifier();
+        _consultationService.GoBack();
+        Notify();
     }
 
-    public void RetourAvecSuppression()
+    public void GoBackWithRemove()
     {
-        _consultationService.RetourAvecSuppression();
-        Notifier();
+        _consultationService.GoBackWithRemove();
+        Notify();
     }
 
-    public void Avancer()
+    public void GoForward()
     {
-        _consultationService.Avancer();
-        Notifier();
+        _consultationService.GoForward();
+        Notify();
     }
 
-    public void AllerA(int index)
+    public void GoTo(int index)
     {
-        _consultationService.AllerA(index);
-        Notifier();
+        _consultationService.GoTo(index);
+        Notify();
     }
 
-    public void ToggleHistorique()
+    public void ToggleHistory()
     {
-        DrawerOuvert = !DrawerOuvert;
-        Notifier(nameof(DrawerOuvert));
+        DrawerOpen = !DrawerOpen;
+        Notify(nameof(DrawerOpen));
     }
 }

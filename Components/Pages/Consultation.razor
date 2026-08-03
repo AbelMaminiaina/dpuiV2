@@ -2,100 +2,99 @@
 @inject LignageApp.ViewModels.ConsultationViewModel ViewModel
 @implements IDisposable
 @rendermode InteractiveServer
-@using LignageApp.Models
 
 <link href="css/lignage-graph.css" rel="stylesheet" />
 
 <div style="display:flex">
     <div style="flex:1">
-        <button @onclick="ViewModel.Retour" disabled="@(!ViewModel.PeutRevenirEnArriere)">← Retour</button>
-        <button @onclick="ViewModel.Avancer" disabled="@(!ViewModel.PeutAllerEnAvant)">Avancer →</button>
-        <button @onclick="ViewModel.RetourAvecSuppression" disabled="@(ViewModel.Historique.Count <= 1)">← Précédent (supprimer)</button>
-        <button @onclick="ViewModel.ToggleHistorique">Historique</button>
-        <button @onclick="ToggleGraphe">@(GrapheVisible ? "Masquer Graphe" : "Afficher Graphe")</button>
-        <h3 title="@ViewModel.NoeudActuel">Lignage du noeud : @Tronquer(ViewModel.NoeudActuel, 50)</h3>
+        <button @onclick="ViewModel.GoBack" disabled="@(!ViewModel.CanGoBack)">← Back</button>
+        <button @onclick="ViewModel.GoForward" disabled="@(!ViewModel.CanGoForward)">Forward →</button>
+        <button @onclick="ViewModel.GoBackWithRemove" disabled="@(ViewModel.History.Count <= 1)">← Previous (remove)</button>
+        <button @onclick="ViewModel.ToggleHistory">History</button>
+        <button @onclick="ToggleGraph">@(GraphVisible ? "Hide Graph" : "Show Graph")</button>
+        <h3 title="@ViewModel.CurrentNode">Node Lineage: @Truncate(ViewModel.CurrentNode, 50)</h3>
 
-        @if (ViewModel.Programme != null)
+        @if (ViewModel.Program != null)
         {
             <div style="margin-bottom:15px; padding:10px; background:#f5f5f5; border-radius:5px">
-                <strong>Programme :</strong> @ViewModel.Programme.Programme<br/>
-                <strong>Version :</strong> @ViewModel.Programme.Version
+                <strong>Program:</strong> @ViewModel.Program.Program<br/>
+                <strong>Version:</strong> @ViewModel.Program.Version
             </div>
         }
 
-        @if (GrapheVisible)
+        @if (GraphVisible)
         {
             <LignageApp.Components.LignageGraph
-                NoeudActuel="@ViewModel.NoeudActuel"
-                Successeurs="@ViewModel.Successeurs"
-                Predecesseurs="@ViewModel.Predecesseurs"
-                Historique="@ViewModel.Historique"
-                ContainerId="graphe-container" />
+                CurrentNode="@ViewModel.CurrentNode"
+                Successors="@ViewModel.Successors"
+                Predecessors="@ViewModel.Predecessors"
+                History="@ViewModel.History"
+                ContainerId="graph-container" />
 
             <div class="graph-legend">
                 <div class="graph-legend-item">
                     <span class="graph-legend-dot actuel"></span>
-                    <span>Actuel</span>
+                    <span>Current</span>
                 </div>
                 <div class="graph-legend-item">
                     <span class="graph-legend-dot predecesseur"></span>
-                    <span>Prédécesseurs</span>
+                    <span>Predecessors</span>
                 </div>
                 <div class="graph-legend-item">
                     <span class="graph-legend-dot successeur"></span>
-                    <span>Successeurs</span>
+                    <span>Successors</span>
                 </div>
                 <div class="graph-legend-item">
                     <span class="graph-legend-dot historique"></span>
-                    <span>Historique</span>
+                    <span>History</span>
                 </div>
             </div>
         }
 
-        <h4>Successeurs</h4>
+        <h4>Successors</h4>
         <table class="table">
-            <thead><tr><th>Noeud</th><th>Transformation</th></tr></thead>
+            <thead><tr><th>Node</th><th>Transformation</th></tr></thead>
             <tbody>
-                @foreach (var s in ViewModel.Successeurs)
+                @foreach (var s in ViewModel.Successors)
                 {
-                    <tr @onclick="() => ViewModel.NaviguerVersAsync(s.Id)" style="cursor:pointer">
-                        <td title="@s.Noeud">@Tronquer(s.Noeud, 50)</td><td>@s.Transformation</td>
+                    <tr @onclick="() => ViewModel.NavigateToAsync(s.Id)" style="cursor:pointer">
+                        <td title="@s.Node">@Truncate(s.Node, 50)</td><td>@s.Transformation</td>
                     </tr>
                 }
             </tbody>
         </table>
 
-        <h4>Predecesseurs</h4>
+        <h4>Predecessors</h4>
         <table class="table">
-            <thead><tr><th>Noeud</th><th>Transformation</th></tr></thead>
+            <thead><tr><th>Node</th><th>Transformation</th></tr></thead>
             <tbody>
-                @foreach (var p in ViewModel.Predecesseurs)
+                @foreach (var p in ViewModel.Predecessors)
                 {
-                    <tr @onclick="() => ViewModel.NaviguerVersAsync(p.Id)" style="cursor:pointer">
-                        <td title="@p.Noeud">@Tronquer(p.Noeud, 50)</td><td>@p.Transformation</td>
+                    <tr @onclick="() => ViewModel.NavigateToAsync(p.Id)" style="cursor:pointer">
+                        <td title="@p.Node">@Truncate(p.Node, 50)</td><td>@p.Transformation</td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
 
-    @if (ViewModel.DrawerOuvert)
+    @if (ViewModel.DrawerOpen)
     {
         <div style="width:250px; border-left:1px solid #ccc; padding:10px">
             <div style="display:flex; justify-content:space-between">
-                <strong>Historique</strong>
-                <button @onclick="ViewModel.ToggleHistorique">X</button>
+                <strong>History</strong>
+                <button @onclick="ViewModel.ToggleHistory">X</button>
             </div>
             <ul style="list-style:none; padding:0">
-                @for (int i = 0; i < ViewModel.Historique.Count; i++)
+                @for (int i = 0; i < ViewModel.History.Count; i++)
                 {
                     var index = i;
-                    var entry = ViewModel.Historique[i];
-                    var isActuel = i == ViewModel.IndexActuel;
-                    <li @onclick="() => ViewModel.AllerA(index)"
-                        style="cursor:pointer; padding:5px; @(isActuel ? "background:#e0e0e0; font-weight:bold" : "")"
-                        title="@entry.Noeud">
-                        @Tronquer(entry.Noeud, 25)
+                    var entry = ViewModel.History[i];
+                    var isCurrent = i == ViewModel.CurrentIndex;
+                    <li @onclick="() => ViewModel.GoTo(index)"
+                        style="cursor:pointer; padding:5px; @(isCurrent ? "background:#e0e0e0; font-weight:bold" : "")"
+                        title="@entry.Node">
+                        @Truncate(entry.Node, 25)
                     </li>
                 }
             </ul>
@@ -105,18 +104,21 @@
 
 @code {
     [Parameter] public string Pk { get; set; } = string.Empty;
-    private bool GrapheVisible { get; set; } = false;
+    private bool GraphVisible { get; set; } = false;
 
     protected override async Task OnParametersSetAsync()
     {
         if (!string.IsNullOrEmpty(Pk))
         {
-            // Décoder le paramètre URL
+            // Decode URL parameter (format: lanUid|linUid|edgDir)
             var decoded = Uri.UnescapeDataString(Pk);
-            var pk = LignagePK.Parse(decoded);
-            if (pk != null)
+            var parts = decoded.Split('|');
+            if (parts.Length == 3)
             {
-                await ViewModel.InitialiserAsync(pk.LnaUid, pk.LinUid, pk.EdgDir);
+                var lanUid = Uri.UnescapeDataString(parts[0]);
+                var linUid = Uri.UnescapeDataString(parts[1]);
+                var edgDir = parts[2];
+                await ViewModel.InitializeAsync(lanUid, linUid, edgDir);
             }
         }
     }
@@ -131,16 +133,16 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private void ToggleGraphe()
+    private void ToggleGraph()
     {
-        GrapheVisible = !GrapheVisible;
+        GraphVisible = !GraphVisible;
     }
 
-    private string Tronquer(string texte, int max)
+    private string Truncate(string text, int max)
     {
-        if (string.IsNullOrEmpty(texte) || texte.Length <= max)
-            return texte;
-        return texte.Substring(0, max) + "...";
+        if (string.IsNullOrEmpty(text) || text.Length <= max)
+            return text;
+        return text.Substring(0, max) + "...";
     }
 
     public void Dispose()

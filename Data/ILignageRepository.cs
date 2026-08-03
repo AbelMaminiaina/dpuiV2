@@ -4,9 +4,9 @@ namespace LignageApp.Data;
 
 public interface ILignageRepository
 {
-    Task<List<NoeudDto>> GetNoeudsDistinctsAsync();
-    Task<LignageRow?> GetByPKAsync(string lnaUid, string linUid, string edgDir);
-    Task<List<LignageDto>> GetSuccesseursAsync(string lnaUid, string linUid, string edgDir);
-    Task<List<LignageDto>> GetPredecesseursAsync(string lnaUid, string linUid, string edgDir);
-    Task<ProgrammeDto?> GetProgrammeAsync(string lnaUid);
+    Task<List<NodeDto>> GetDistinctNodesAsync();
+    Task<LignageRow?> GetByPKAsync(string lanUid, string linUid, string edgDir);
+    Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir);
+    Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir);
+    Task<ProgramDto?> GetProgramAsync(string lanUid);
 }

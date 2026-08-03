@@ -52,24 +52,24 @@ public class CacheService : ICacheService
 }
 
 /// <summary>
-/// Clés de cache - utilise un hash pour éviter les clés trop longues
+/// Cache keys - uses hash to avoid overly long keys
 /// </summary>
 public static class CacheKeys
 {
-    public const string NoeudsDistincts = "noeuds_distincts";
+    public const string DistinctNodes = "distinct_nodes";
 
-    public static string LignageRow(string lnaUid, string linUid, string edgDir)
-        => $"row_{Hash(lnaUid, linUid, edgDir)}";
+    public static string LignageRow(string lanUid, string linUid, string edgDir)
+        => $"row_{Hash(lanUid, linUid, edgDir)}";
 
-    public static string Successeurs(string lnaUid, string linUid, string edgDir)
-        => $"succ_{Hash(lnaUid, linUid, edgDir)}";
+    public static string Successors(string lanUid, string linUid, string edgDir)
+        => $"succ_{Hash(lanUid, linUid, edgDir)}";
 
-    public static string Predecesseurs(string lnaUid, string linUid, string edgDir)
-        => $"pred_{Hash(lnaUid, linUid, edgDir)}";
+    public static string Predecessors(string lanUid, string linUid, string edgDir)
+        => $"pred_{Hash(lanUid, linUid, edgDir)}";
 
-    public static string Programme(string lnaUid)
-        => $"prog_{lnaUid.GetHashCode():X8}";
+    public static string Program(string lanUid)
+        => $"prog_{lanUid.GetHashCode():X8}";
 
-    private static string Hash(string lnaUid, string linUid, string edgDir)
-        => $"{lnaUid.GetHashCode():X8}_{linUid.GetHashCode():X8}_{edgDir}";
+    private static string Hash(string lanUid, string linUid, string edgDir)
+        => $"{lanUid.GetHashCode():X8}_{linUid.GetHashCode():X8}_{edgDir}";
 }

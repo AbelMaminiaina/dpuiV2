@@ -4,11 +4,11 @@
 <div id="@ContainerId" class="lignage-graph-container"></div>
 
 @code {
-    [Parameter] public string NoeudActuel { get; set; } = string.Empty;
-    [Parameter] public List<LignageDto> Successeurs { get; set; } = new();
-    [Parameter] public List<LignageDto> Predecesseurs { get; set; } = new();
-    [Parameter] public List<HistoriqueEntry> Historique { get; set; } = new();
-    [Parameter] public string ContainerId { get; set; } = "graphe-container";
+    [Parameter] public string CurrentNode { get; set; } = string.Empty;
+    [Parameter] public List<LineageDto> Successors { get; set; } = new();
+    [Parameter] public List<LineageDto> Predecessors { get; set; } = new();
+    [Parameter] public List<HistoryEntry> History { get; set; } = new();
+    [Parameter] public string ContainerId { get; set; } = "graph-container";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -27,15 +27,15 @@
         var links = new List<object>();
         var nodeSet = new HashSet<string>();
 
-        // Noeud actuel (vert)
-        var currentNodeTrunc = Tronquer(NoeudActuel, 20);
+        // Current node (green)
+        var currentNodeTrunc = Truncate(CurrentNode, 20);
         nodeSet.Add(currentNodeTrunc);
         nodes.Add(new { id = currentNodeTrunc, color = "#4CAF50", marker = new { radius = 25 } });
 
-        // Predecesseurs (bleu)
-        foreach (var p in Predecesseurs)
+        // Predecessors (blue)
+        foreach (var p in Predecessors)
         {
-            var pTrunc = Tronquer(p.Noeud, 20);
+            var pTrunc = Truncate(p.Node, 20);
             if (!nodeSet.Contains(pTrunc))
             {
                 nodeSet.Add(pTrunc);
@@ -44,10 +44,10 @@
             links.Add(new { from = pTrunc, to = currentNodeTrunc });
         }
 
-        // Successeurs (orange)
-        foreach (var s in Successeurs)
+        // Successors (orange)
+        foreach (var s in Successors)
         {
-            var sTrunc = Tronquer(s.Noeud, 20);
+            var sTrunc = Truncate(s.Node, 20);
             if (!nodeSet.Contains(sTrunc))
             {
                 nodeSet.Add(sTrunc);
@@ -56,11 +56,11 @@
             links.Add(new { from = currentNodeTrunc, to = sTrunc });
         }
 
-        // Historique (gris)
-        for (int i = 0; i < Historique.Count - 1; i++)
+        // History (gray)
+        for (int i = 0; i < History.Count - 1; i++)
         {
-            var fromTrunc = Tronquer(Historique[i].Noeud, 20);
-            var toTrunc = Tronquer(Historique[i + 1].Noeud, 20);
+            var fromTrunc = Truncate(History[i].Node, 20);
+            var toTrunc = Truncate(History[i + 1].Node, 20);
 
             if (!nodeSet.Contains(fromTrunc))
             {
@@ -73,7 +73,7 @@
                 nodes.Add(new { id = toTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
             }
 
-            // Vérifier si le lien existe déjà
+            // Check if link already exists
             var linkExists = links.Cast<dynamic>().Any(l => l.from == fromTrunc && l.to == toTrunc);
             if (!linkExists)
             {
@@ -84,8 +84,8 @@
         return new
         {
             chart = new { type = "networkgraph", height = 450 },
-            title = new { text = "Graphe de Lignage" },
-            subtitle = new { text = "Vert: Actuel | Bleu: Prédécesseurs | Orange: Successeurs | Gris: Historique" },
+            title = new { text = "Lineage Graph" },
+            subtitle = new { text = "Green: Current | Blue: Predecessors | Orange: Successors | Gray: History" },
             plotOptions = new
             {
                 networkgraph = new
@@ -120,10 +120,10 @@
         };
     }
 
-    private string Tronquer(string texte, int max)
+    private string Truncate(string text, int max)
     {
-        if (string.IsNullOrEmpty(texte) || texte.Length <= max)
-            return texte;
-        return texte.Substring(0, max) + "...";
+        if (string.IsNullOrEmpty(text) || text.Length <= max)
+            return text;
+        return text.Substring(0, max) + "...";
     }
 }

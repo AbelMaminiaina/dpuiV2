@@ -14,59 +14,59 @@ public class CachedLignageRepository : ILignageRepository
         _cache = cache;
     }
 
-    public async Task<List<NoeudDto>> GetNoeudsDistinctsAsync()
+    public async Task<List<NodeDto>> GetDistinctNodesAsync()
     {
-        if (_cache.TryGet<List<NoeudDto>>(CacheKeys.NoeudsDistincts, out var cached) && cached != null)
+        if (_cache.TryGet<List<NodeDto>>(CacheKeys.DistinctNodes, out var cached) && cached != null)
             return cached;
 
-        var noeuds = await _repository.GetNoeudsDistinctsAsync();
-        _cache.Set(CacheKeys.NoeudsDistincts, noeuds, TimeSpan.FromHours(1));
-        return noeuds;
+        var nodes = await _repository.GetDistinctNodesAsync();
+        _cache.Set(CacheKeys.DistinctNodes, nodes, TimeSpan.FromHours(1));
+        return nodes;
     }
 
-    public async Task<LignageRow?> GetByPKAsync(string lnaUid, string linUid, string edgDir)
+    public async Task<LignageRow?> GetByPKAsync(string lanUid, string linUid, string edgDir)
     {
-        var key = CacheKeys.LignageRow(lnaUid, linUid, edgDir);
+        var key = CacheKeys.LignageRow(lanUid, linUid, edgDir);
         if (_cache.TryGet<LignageRow>(key, out var cached) && cached != null)
             return cached;
 
-        var row = await _repository.GetByPKAsync(lnaUid, linUid, edgDir);
+        var row = await _repository.GetByPKAsync(lanUid, linUid, edgDir);
         if (row != null)
             _cache.Set(key, row, TimeSpan.FromMinutes(30));
         return row;
     }
 
-    public async Task<List<LignageDto>> GetSuccesseursAsync(string lnaUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir)
     {
-        var key = CacheKeys.Successeurs(lnaUid, linUid, edgDir);
-        if (_cache.TryGet<List<LignageDto>>(key, out var cached) && cached != null)
+        var key = CacheKeys.Successors(lanUid, linUid, edgDir);
+        if (_cache.TryGet<List<LineageDto>>(key, out var cached) && cached != null)
             return cached;
 
-        var successeurs = await _repository.GetSuccesseursAsync(lnaUid, linUid, edgDir);
-        _cache.Set(key, successeurs, TimeSpan.FromMinutes(30));
-        return successeurs;
+        var successors = await _repository.GetSuccessorsAsync(lanUid, linUid, edgDir);
+        _cache.Set(key, successors, TimeSpan.FromMinutes(30));
+        return successors;
     }
 
-    public async Task<List<LignageDto>> GetPredecesseursAsync(string lnaUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir)
     {
-        var key = CacheKeys.Predecesseurs(lnaUid, linUid, edgDir);
-        if (_cache.TryGet<List<LignageDto>>(key, out var cached) && cached != null)
+        var key = CacheKeys.Predecessors(lanUid, linUid, edgDir);
+        if (_cache.TryGet<List<LineageDto>>(key, out var cached) && cached != null)
             return cached;
 
-        var predecesseurs = await _repository.GetPredecesseursAsync(lnaUid, linUid, edgDir);
-        _cache.Set(key, predecesseurs, TimeSpan.FromMinutes(30));
-        return predecesseurs;
+        var predecessors = await _repository.GetPredecessorsAsync(lanUid, linUid, edgDir);
+        _cache.Set(key, predecessors, TimeSpan.FromMinutes(30));
+        return predecessors;
     }
 
-    public async Task<ProgrammeDto?> GetProgrammeAsync(string lnaUid)
+    public async Task<ProgramDto?> GetProgramAsync(string lanUid)
     {
-        var key = CacheKeys.Programme(lnaUid);
-        if (_cache.TryGet<ProgrammeDto>(key, out var cached) && cached != null)
+        var key = CacheKeys.Program(lanUid);
+        if (_cache.TryGet<ProgramDto>(key, out var cached) && cached != null)
             return cached;
 
-        var programme = await _repository.GetProgrammeAsync(lnaUid);
-        if (programme != null)
-            _cache.Set(key, programme, TimeSpan.FromMinutes(30));
-        return programme;
+        var program = await _repository.GetProgramAsync(lanUid);
+        if (program != null)
+            _cache.Set(key, program, TimeSpan.FromMinutes(30));
+        return program;
     }
 }

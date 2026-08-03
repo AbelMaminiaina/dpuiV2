@@ -8,15 +8,15 @@ public class ConsultationService : IConsultationService
     private readonly ILignageRepository _repository;
     private readonly NavigationSession _session;
 
-    public string IdActuel => _session.IdActuel;
-    public string NoeudActuel => _session.NoeudActuel;
-    public List<LignageDto> Successeurs { get; private set; } = new();
-    public List<LignageDto> Predecesseurs { get; private set; } = new();
-    public ProgrammeDto? Programme { get; private set; }
-    public bool PeutRevenirEnArriere => _session.PeutRevenirEnArriere;
-    public bool PeutAllerEnAvant => _session.PeutAllerEnAvant;
-    public List<HistoriqueEntry> Historique => _session.ObtenirHistorique();
-    public int IndexActuel => _session.IndexActuel;
+    public string CurrentId => _session.CurrentId;
+    public string CurrentNode => _session.CurrentNode;
+    public List<LineageDto> Successors { get; private set; } = new();
+    public List<LineageDto> Predecessors { get; private set; } = new();
+    public ProgramDto? Program { get; private set; }
+    public bool CanGoBack => _session.CanGoBack;
+    public bool CanGoForward => _session.CanGoForward;
+    public List<HistoryEntry> History => _session.GetHistory();
+    public int CurrentIndex => _session.CurrentIndex;
 
     public ConsultationService(ILignageRepository repository, NavigationSession session)
     {
@@ -24,83 +24,83 @@ public class ConsultationService : IConsultationService
         _session = session;
     }
 
-    public async Task InitialiserAsync(string lnaUid, string linUid, string edgDir)
+    public async Task InitializeAsync(string lanUid, string linUid, string edgDir)
     {
-        _session.Reinitialiser();
-        await ChargerDepuisBaseAsync(lnaUid, linUid, edgDir);
+        _session.Reset();
+        await LoadFromDatabaseAsync(lanUid, linUid, edgDir);
 
-        _session.Ajouter(new HistoriqueEntry
+        _session.Add(new HistoryEntry
         {
-            Id = _session.IdActuel,
-            Noeud = _session.NoeudActuel,
-            Successeurs = Successeurs,
-            Predecesseurs = Predecesseurs,
-            Programme = Programme
+            Id = _session.CurrentId,
+            Node = _session.CurrentNode,
+            Successors = Successors,
+            Predecessors = Predecessors,
+            Program = Program
         });
     }
 
-    public async Task NaviguerVersAsync(string lnaUid, string linUid, string edgDir)
+    public async Task NavigateToAsync(string lanUid, string linUid, string edgDir)
     {
-        await ChargerDepuisBaseAsync(lnaUid, linUid, edgDir);
+        await LoadFromDatabaseAsync(lanUid, linUid, edgDir);
 
-        _session.Ajouter(new HistoriqueEntry
+        _session.Add(new HistoryEntry
         {
-            Id = _session.IdActuel,
-            Noeud = _session.NoeudActuel,
-            Successeurs = Successeurs,
-            Predecesseurs = Predecesseurs,
-            Programme = Programme
+            Id = _session.CurrentId,
+            Node = _session.CurrentNode,
+            Successors = Successors,
+            Predecessors = Predecessors,
+            Program = Program
         });
     }
 
-    public void Retour()
+    public void GoBack()
     {
-        var precedent = _session.Precedent();
-        if (precedent != null)
-            ChargerDepuisHistorique(precedent);
+        var previous = _session.Previous();
+        if (previous != null)
+            LoadFromHistory(previous);
     }
 
-    public void RetourAvecSuppression()
+    public void GoBackWithRemove()
     {
-        var precedent = _session.PrecedentAvecSuppression();
-        if (precedent != null)
-            ChargerDepuisHistorique(precedent);
+        var previous = _session.PreviousWithRemove();
+        if (previous != null)
+            LoadFromHistory(previous);
     }
 
-    public void Avancer()
+    public void GoForward()
     {
-        var suivant = _session.Suivant();
-        if (suivant != null)
-            ChargerDepuisHistorique(suivant);
+        var next = _session.Next();
+        if (next != null)
+            LoadFromHistory(next);
     }
 
-    public void AllerA(int index)
+    public void GoTo(int index)
     {
-        _session.AllerA(index);
-        var entree = _session.Consulter();
-        if (entree != null)
-            ChargerDepuisHistorique(entree);
+        _session.GoTo(index);
+        var entry = _session.Current();
+        if (entry != null)
+            LoadFromHistory(entry);
     }
 
-    private async Task ChargerDepuisBaseAsync(string lnaUid, string linUid, string edgDir)
+    private async Task LoadFromDatabaseAsync(string lanUid, string linUid, string edgDir)
     {
-        var row = await _repository.GetByPKAsync(lnaUid, linUid, edgDir);
+        var row = await _repository.GetByPKAsync(lanUid, linUid, edgDir);
         if (row != null)
         {
-            _session.IdActuel = $"{lnaUid}|{linUid}|{edgDir}";
-            _session.NoeudActuel = row.Noeuds1;
-            Successeurs = await _repository.GetSuccesseursAsync(lnaUid, linUid, edgDir);
-            Predecesseurs = await _repository.GetPredecesseursAsync(lnaUid, linUid, edgDir);
-            Programme = await _repository.GetProgrammeAsync(lnaUid);
+            _session.CurrentId = $"{lanUid}|{linUid}|{edgDir}";
+            _session.CurrentNode = row.SourceNode;
+            Successors = await _repository.GetSuccessorsAsync(lanUid, linUid, edgDir);
+            Predecessors = await _repository.GetPredecessorsAsync(lanUid, linUid, edgDir);
+            Program = await _repository.GetProgramAsync(lanUid);
         }
     }
 
-    private void ChargerDepuisHistorique(HistoriqueEntry entree)
+    private void LoadFromHistory(HistoryEntry entry)
     {
-        _session.IdActuel = entree.Id;
-        _session.NoeudActuel = entree.Noeud;
-        Successeurs = entree.Successeurs;
-        Predecesseurs = entree.Predecesseurs;
-        Programme = entree.Programme;
+        _session.CurrentId = entry.Id;
+        _session.CurrentNode = entry.Node;
+        Successors = entry.Successors;
+        Predecessors = entry.Predecessors;
+        Program = entry.Program;
     }
 }
