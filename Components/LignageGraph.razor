@@ -97,7 +97,16 @@
                         linkLength = 120,
                         gravitationalConstant = 0.02
                     },
-                    link = new { width = 2, color = "#666666" }
+                    link = new
+                    {
+                        width = 2,
+                        color = "#666666",
+                        marker = new
+                        {
+                            enabled = true,
+                            radius = 4
+                        }
+                    }
                 }
             },
             series = new[]
@@ -112,7 +121,15 @@
                         style = new { fontSize = "11px", fontWeight = "normal" },
                         y = -10
                     },
-                    link = new { width = 2 },
+                    link = new
+                    {
+                        width = 2,
+                        marker = new
+                        {
+                            enabled = true,
+                            radius = 4
+                        }
+                    },
                     data = links,
                     nodes = nodes
                 }
