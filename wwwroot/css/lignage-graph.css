@@ -1,0 +1,99 @@
+/* Styles pour le graphe de lignage */
+.lignage-graph-container {
+    width: 100%;
+    height: 450px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Style pour les noeuds */
+.highcharts-point {
+    stroke-width: 2px;
+    stroke: #fff;
+    transition: transform 0.2s ease;
+}
+
+.highcharts-point:hover {
+    transform: scale(1.1);
+    cursor: pointer;
+}
+
+/* Style pour les liens */
+.highcharts-link {
+    stroke-linecap: round;
+    transition: stroke-width 0.2s ease;
+}
+
+.highcharts-link:hover {
+    stroke-width: 4px !important;
+}
+
+/* Style pour les labels */
+.highcharts-data-label text {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    fill: #333;
+    text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+/* Style pour le titre */
+.highcharts-title {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-weight: 600;
+    fill: #2c3e50 !important;
+}
+
+/* Style pour le sous-titre (légende) */
+.highcharts-subtitle {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 12px !important;
+    fill: #7f8c8d !important;
+}
+
+/* Animation d'apparition */
+.lignage-graph-container .highcharts-series-group {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Légende personnalisée */
+.graph-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+.graph-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #666;
+}
+
+.graph-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.graph-legend-dot.actuel { background-color: #4CAF50; }
+.graph-legend-dot.predecesseur { background-color: #2196F3; }
+.graph-legend-dot.successeur { background-color: #FF9800; }
+.graph-legend-dot.historique { background-color: #9E9E9E; }

@@ -33,11 +33,14 @@ else
         await ViewModel.ChargerAsync();
     }
 
-    private void OnChanged(object sender, EventArgs e) => InvokeAsync(StateHasChanged);
+    private void OnChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
 
-    private void AllerVersConsultation(int id)
+    private void AllerVersConsultation(string id)
     {
-        Navigation.NavigateTo($"/consultation/{id}");
+        // id est déjà au format: lnaUid|linUid|edgDir
+        // On l'encode pour l'URL
+        var encoded = Uri.EscapeDataString(id);
+        Navigation.NavigateTo($"/consultation/{encoded}");
     }
 
     private string Tronquer(string texte, int max)

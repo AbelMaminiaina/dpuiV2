@@ -9,8 +9,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Repository
-builder.Services.AddScoped<ILignageRepository, LignageRepository>();
+// Cache en mémoire
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ICacheService, CacheService>();
+
+// Repository avec cache
+builder.Services.AddScoped<LignageRepository>();
+builder.Services.AddScoped<ILignageRepository, CachedLignageRepository>();
 
 // Services
 builder.Services.AddScoped<NavigationSession>();

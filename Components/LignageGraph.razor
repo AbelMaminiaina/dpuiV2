@@ -1,0 +1,129 @@
+@inject IJSRuntime JS
+@using LignageApp.Models
+
+<div id="@ContainerId" class="lignage-graph-container"></div>
+
+@code {
+    [Parameter] public string NoeudActuel { get; set; } = string.Empty;
+    [Parameter] public List<LignageDto> Successeurs { get; set; } = new();
+    [Parameter] public List<LignageDto> Predecesseurs { get; set; } = new();
+    [Parameter] public List<HistoriqueEntry> Historique { get; set; } = new();
+    [Parameter] public string ContainerId { get; set; } = "graphe-container";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await RenderGraph();
+    }
+
+    private async Task RenderGraph()
+    {
+        var config = BuildGraphConfig();
+        await JS.InvokeVoidAsync("renderHighchartsGraph", ContainerId, config);
+    }
+
+    private object BuildGraphConfig()
+    {
+        var nodes = new List<object>();
+        var links = new List<object>();
+        var nodeSet = new HashSet<string>();
+
+        // Noeud actuel (vert)
+        var currentNodeTrunc = Tronquer(NoeudActuel, 20);
+        nodeSet.Add(currentNodeTrunc);
+        nodes.Add(new { id = currentNodeTrunc, color = "#4CAF50", marker = new { radius = 25 } });
+
+        // Predecesseurs (bleu)
+        foreach (var p in Predecesseurs)
+        {
+            var pTrunc = Tronquer(p.Noeud, 20);
+            if (!nodeSet.Contains(pTrunc))
+            {
+                nodeSet.Add(pTrunc);
+                nodes.Add(new { id = pTrunc, color = "#2196F3", marker = new { radius = 15 } });
+            }
+            links.Add(new { from = pTrunc, to = currentNodeTrunc });
+        }
+
+        // Successeurs (orange)
+        foreach (var s in Successeurs)
+        {
+            var sTrunc = Tronquer(s.Noeud, 20);
+            if (!nodeSet.Contains(sTrunc))
+            {
+                nodeSet.Add(sTrunc);
+                nodes.Add(new { id = sTrunc, color = "#FF9800", marker = new { radius = 15 } });
+            }
+            links.Add(new { from = currentNodeTrunc, to = sTrunc });
+        }
+
+        // Historique (gris)
+        for (int i = 0; i < Historique.Count - 1; i++)
+        {
+            var fromTrunc = Tronquer(Historique[i].Noeud, 20);
+            var toTrunc = Tronquer(Historique[i + 1].Noeud, 20);
+
+            if (!nodeSet.Contains(fromTrunc))
+            {
+                nodeSet.Add(fromTrunc);
+                nodes.Add(new { id = fromTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
+            }
+            if (!nodeSet.Contains(toTrunc))
+            {
+                nodeSet.Add(toTrunc);
+                nodes.Add(new { id = toTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
+            }
+
+            // Vérifier si le lien existe déjà
+            var linkExists = links.Cast<dynamic>().Any(l => l.from == fromTrunc && l.to == toTrunc);
+            if (!linkExists)
+            {
+                links.Add(new { from = fromTrunc, to = toTrunc });
+            }
+        }
+
+        return new
+        {
+            chart = new { type = "networkgraph", height = 450 },
+            title = new { text = "Graphe de Lignage" },
+            subtitle = new { text = "Vert: Actuel | Bleu: Prédécesseurs | Orange: Successeurs | Gris: Historique" },
+            plotOptions = new
+            {
+                networkgraph = new
+                {
+                    keys = new[] { "from", "to" },
+                    layoutAlgorithm = new
+                    {
+                        enableSimulation = true,
+                        linkLength = 120,
+                        gravitationalConstant = 0.02
+                    },
+                    link = new { width = 2, color = "#666666" }
+                }
+            },
+            series = new[]
+            {
+                new
+                {
+                    marker = new { radius = 15 },
+                    dataLabels = new
+                    {
+                        enabled = true,
+                        linkFormat = "",
+                        style = new { fontSize = "11px", fontWeight = "normal" },
+                        y = -10
+                    },
+                    link = new { width = 2 },
+                    data = links,
+                    nodes = nodes
+                }
+            }
+        };
+    }
+
+    private string Tronquer(string texte, int max)
+    {
+        if (string.IsNullOrEmpty(texte) || texte.Length <= max)
+            return texte;
+        return texte.Substring(0, max) + "...";
+    }
+}

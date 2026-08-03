@@ -1,12 +1,16 @@
-@page "/consultation/{Id:int}"
+@page "/consultation/{Pk}"
 @inject LignageApp.ViewModels.ConsultationViewModel ViewModel
-@inject IJSRuntime JS
 @implements IDisposable
 @rendermode InteractiveServer
+@using LignageApp.Models
+
+<link href="css/lignage-graph.css" rel="stylesheet" />
 
 <div style="display:flex">
     <div style="flex:1">
         <button @onclick="ViewModel.Retour" disabled="@(!ViewModel.PeutRevenirEnArriere)">← Retour</button>
+        <button @onclick="ViewModel.Avancer" disabled="@(!ViewModel.PeutAllerEnAvant)">Avancer →</button>
+        <button @onclick="ViewModel.RetourAvecSuppression" disabled="@(ViewModel.Historique.Count <= 1)">← Précédent (supprimer)</button>
         <button @onclick="ViewModel.ToggleHistorique">Historique</button>
         <button @onclick="ToggleGraphe">@(GrapheVisible ? "Masquer Graphe" : "Afficher Graphe")</button>
         <h3 title="@ViewModel.NoeudActuel">Lignage du noeud : @Tronquer(ViewModel.NoeudActuel, 50)</h3>
@@ -21,7 +25,31 @@
 
         @if (GrapheVisible)
         {
-            <div id="graphe-container" style="width:100%; height:400px; border:1px solid #ccc; margin-bottom:20px;"></div>
+            <LignageApp.Components.LignageGraph
+                NoeudActuel="@ViewModel.NoeudActuel"
+                Successeurs="@ViewModel.Successeurs"
+                Predecesseurs="@ViewModel.Predecesseurs"
+                Historique="@ViewModel.Historique"
+                ContainerId="graphe-container" />
+
+            <div class="graph-legend">
+                <div class="graph-legend-item">
+                    <span class="graph-legend-dot actuel"></span>
+                    <span>Actuel</span>
+                </div>
+                <div class="graph-legend-item">
+                    <span class="graph-legend-dot predecesseur"></span>
+                    <span>Prédécesseurs</span>
+                </div>
+                <div class="graph-legend-item">
+                    <span class="graph-legend-dot successeur"></span>
+                    <span>Successeurs</span>
+                </div>
+                <div class="graph-legend-item">
+                    <span class="graph-legend-dot historique"></span>
+                    <span>Historique</span>
+                </div>
+            </div>
         }
 
         <h4>Successeurs</h4>
@@ -59,9 +87,14 @@
                 <button @onclick="ViewModel.ToggleHistorique">X</button>
             </div>
             <ul style="list-style:none; padding:0">
-                @foreach (var entry in ViewModel.Historique)
+                @for (int i = 0; i < ViewModel.Historique.Count; i++)
                 {
-                    <li @onclick="() => ViewModel.RevenirA(entry.Id)" style="cursor:pointer; padding:5px" title="@entry.Noeud">
+                    var index = i;
+                    var entry = ViewModel.Historique[i];
+                    var isActuel = i == ViewModel.IndexActuel;
+                    <li @onclick="() => ViewModel.AllerA(index)"
+                        style="cursor:pointer; padding:5px; @(isActuel ? "background:#e0e0e0; font-weight:bold" : "")"
+                        title="@entry.Noeud">
                         @Tronquer(entry.Noeud, 25)
                     </li>
                 }
@@ -71,15 +104,20 @@
 </div>
 
 @code {
-    [Parameter] public int Id { get; set; }
+    [Parameter] public string Pk { get; set; } = string.Empty;
     private bool GrapheVisible { get; set; } = false;
 
     protected override async Task OnParametersSetAsync()
     {
-        await ViewModel.InitialiserParIdAsync(Id);
-        if (GrapheVisible)
+        if (!string.IsNullOrEmpty(Pk))
         {
-            await RenderGraphe();
+            // Décoder le paramètre URL
+            var decoded = Uri.UnescapeDataString(Pk);
+            var pk = LignagePK.Parse(decoded);
+            if (pk != null)
+            {
+                await ViewModel.InitialiserAsync(pk.LnaUid, pk.LinUid, pk.EdgDir);
+            }
         }
     }
 
@@ -91,34 +129,11 @@
     private async void OnChanged(object? sender, EventArgs e)
     {
         await InvokeAsync(StateHasChanged);
-        if (GrapheVisible)
-        {
-            await Task.Delay(100); // Attendre le rendu du DOM
-            await RenderGraphe();
-        }
     }
 
-    private async Task ToggleGraphe()
+    private void ToggleGraphe()
     {
         GrapheVisible = !GrapheVisible;
-        if (GrapheVisible)
-        {
-            await Task.Delay(100); // Attendre le rendu du DOM
-            await RenderGraphe();
-        }
-    }
-
-    private async Task RenderGraphe()
-    {
-        var data = new
-        {
-            noeudActuel = ViewModel.NoeudActuel,
-            successeurs = ViewModel.Successeurs.Select(s => new { noeud = s.Noeud, id = s.Id }).ToList(),
-            predecesseurs = ViewModel.Predecesseurs.Select(p => new { noeud = p.Noeud, id = p.Id }).ToList(),
-            historique = ViewModel.Historique.Select(h => new { noeud = h.Noeud, id = h.Id }).ToList()
-        };
-
-        await JS.InvokeVoidAsync("lignageGraph.render", "graphe-container", data);
     }
 
     private string Tronquer(string texte, int max)

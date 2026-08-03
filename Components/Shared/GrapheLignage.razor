@@ -1,0 +1,93 @@
+@namespace LignageApp.Components.Shared
+
+<div class="graphe-container">
+    <div class="graphe-legende">
+        <span class="legende-item"><span class="legende-dot actuel"></span> Actuel</span>
+        <span class="legende-item"><span class="legende-dot predecesseur"></span> Prédécesseurs</span>
+        <span class="legende-item"><span class="legende-dot successeur"></span> Successeurs</span>
+    </div>
+
+    <div class="graphe-content">
+        @* Colonne des prédécesseurs *@
+        <div class="graphe-colonne predecesseurs">
+            @foreach (var pred in Predecesseurs)
+            {
+                <div class="noeud-wrapper">
+                    <div class="noeud predecesseur"
+                         title="@pred.Noeud"
+                         @onclick="() => OnNoeudClick.InvokeAsync(pred.Id)">
+                        @Tronquer(pred.Noeud, 15)
+                        <div class="transformation">@pred.Transformation</div>
+                    </div>
+                    <div class="fleche fleche-droite">→</div>
+                </div>
+            }
+        </div>
+
+        @* Noeud central *@
+        <div class="graphe-colonne centre">
+            <div class="noeud actuel" title="@NoeudActuel">
+                @Tronquer(NoeudActuel, 20)
+            </div>
+        </div>
+
+        @* Colonne des successeurs *@
+        <div class="graphe-colonne successeurs">
+            @foreach (var succ in Successeurs)
+            {
+                <div class="noeud-wrapper">
+                    <div class="fleche fleche-gauche">→</div>
+                    <div class="noeud successeur"
+                         title="@succ.Noeud"
+                         @onclick="() => OnNoeudClick.InvokeAsync(succ.Id)">
+                        @Tronquer(succ.Noeud, 15)
+                        <div class="transformation">@succ.Transformation</div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Historique en bas *@
+    @if (Historique.Count > 1)
+    {
+        <div class="graphe-historique">
+            <div class="historique-titre">Historique de navigation</div>
+            <div class="historique-chemin">
+                @for (int i = 0; i < Historique.Count; i++)
+                {
+                    var entry = Historique[i];
+                    var index = i;
+                    var isActuel = i == IndexActuel;
+
+                    @if (i > 0)
+                    {
+                        <span class="historique-fleche">→</span>
+                    }
+                    <span class="historique-noeud @(isActuel ? "actuel" : "")"
+                          title="@entry.Noeud"
+                          @onclick="() => OnHistoriqueClick.InvokeAsync(index)">
+                        @Tronquer(entry.Noeud, 12)
+                    </span>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string NoeudActuel { get; set; } = string.Empty;
+    [Parameter] public List<LignageApp.Models.LignageDto> Predecesseurs { get; set; } = new();
+    [Parameter] public List<LignageApp.Models.LignageDto> Successeurs { get; set; } = new();
+    [Parameter] public List<LignageApp.Models.HistoriqueEntry> Historique { get; set; } = new();
+    [Parameter] public int IndexActuel { get; set; }
+    [Parameter] public EventCallback<string> OnNoeudClick { get; set; }
+    [Parameter] public EventCallback<int> OnHistoriqueClick { get; set; }
+
+    private string Tronquer(string texte, int max)
+    {
+        if (string.IsNullOrEmpty(texte) || texte.Length <= max)
+            return texte;
+        return texte.Substring(0, max) + "...";
+    }
+}

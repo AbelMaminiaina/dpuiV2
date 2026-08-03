@@ -10,142 +10,119 @@ public class LignageRepository : ILignageRepository
 
     public LignageRepository(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("LignageDb");
+        _connectionString = configuration.GetConnectionString("LignageDb2") ?? string.Empty;
     }
 
     public async Task<List<NoeudDto>> GetNoeudsDistinctsAsync()
     {
         const string sql = @"
-            SELECT ROW_NUMBER() OVER (ORDER BY noeud_hash) AS Id, noeud AS Noeud
-            FROM (
-                SELECT DISTINCT noeud, HASHBYTES('SHA2_256', noeud) AS noeud_hash
-                FROM (
-                    SELECT noeuds1 AS noeud FROM table1
-                    UNION
-                    SELECT noeuds1lie AS noeud FROM table1
-                ) AS tous_noeuds
-            ) AS noeuds_uniques
-            ORDER BY noeud_hash;";
+            WITH NoeudsAvecPK AS (
+                SELECT
+                    noeuds1 AS Noeud,
+                    lna_uid AS LnaUid,
+                    lin_uid AS LinUid,
+                    edg_dir AS EdgDir,
+                    ROW_NUMBER() OVER (PARTITION BY noeuds1 ORDER BY lna_uid, lin_uid) AS rn
+                FROM table1
+            )
+            SELECT
+                LnaUid + '|' + LinUid + '|' + EdgDir AS Id,
+                Noeud
+            FROM NoeudsAvecPK
+            WHERE rn = 1
+            ORDER BY Noeud;";
 
         using var connection = new SqlConnection(_connectionString);
         var result = await connection.QueryAsync<NoeudDto>(sql);
         return result.ToList();
     }
 
-    public async Task<NoeudDto?> GetNoeudByIdAsync(int id)
+    public async Task<LignageRow?> GetByPKAsync(string lnaUid, string linUid, string edgDir)
     {
         const string sql = @"
-            SELECT Id, Noeud FROM (
-                SELECT ROW_NUMBER() OVER (ORDER BY HASHBYTES('SHA2_256', noeud)) AS Id, noeud AS Noeud
-                FROM (
-                    SELECT DISTINCT noeud
-                    FROM (
-                        SELECT noeuds1 AS noeud FROM table1
-                        UNION
-                        SELECT noeuds1lie AS noeud FROM table1
-                    ) AS tous_noeuds
-                ) AS noeuds_uniques
-            ) AS numbered
-            WHERE Id = @Id;";
+            SELECT
+                lna_uid AS LnaUid,
+                lin_uid AS LinUid,
+                edg_dir AS EdgDir,
+                noeuds1 AS Noeuds1,
+                noeuds1lie AS Noeuds1Lie,
+                transformation AS Transformation
+            FROM table1
+            WHERE lna_uid = @LnaUid AND lin_uid = @LinUid AND edg_dir = @EdgDir;";
 
         using var connection = new SqlConnection(_connectionString);
-        return await connection.QueryFirstOrDefaultAsync<NoeudDto>(sql, new { Id = id });
+        return await connection.QueryFirstOrDefaultAsync<LignageRow>(sql,
+            new { LnaUid = lnaUid, LinUid = linUid, EdgDir = edgDir });
     }
 
-    public async Task<List<LignageDto>> GetSuccesseursAsync(int id)
+    public async Task<List<LignageDto>> GetSuccesseursAsync(string lnaUid, string linUid, string edgDir)
     {
+        // Optimisé: une seule requête avec JOIN
         const string sql = @"
-            WITH NoeudsAvecId AS (
-                SELECT ROW_NUMBER() OVER (ORDER BY HASHBYTES('SHA2_256', noeud)) AS Id,
-                       noeud,
-                       HASHBYTES('SHA2_256', noeud) AS noeud_hash
-                FROM (
-                    SELECT DISTINCT noeud
-                    FROM (
-                        SELECT noeuds1 AS noeud FROM table1
-                        UNION
-                        SELECT noeuds1lie AS noeud FROM table1
-                    ) AS tous_noeuds
-                ) AS noeuds_uniques
-            ),
-            NoeudCourant AS (
-                SELECT noeud_hash FROM NoeudsAvecId WHERE Id = @Id
+            WITH NoeudActuel AS (
+                SELECT noeuds1 FROM table1
+                WHERE lna_uid = @LnaUid AND lin_uid = @LinUid AND edg_dir = @EdgDir
             )
-            SELECT n.Id, s.Noeud, s.Transformation
-            FROM (
-                SELECT noeuds1lie AS Noeud, transformation AS Transformation
-                FROM table1
-                WHERE HASHBYTES('SHA2_256', noeuds1) = (SELECT noeud_hash FROM NoeudCourant) AND edg_dir = 'I'
-                UNION
-                SELECT noeuds1 AS Noeud, transformation AS Transformation
-                FROM table1
-                WHERE HASHBYTES('SHA2_256', noeuds1lie) = (SELECT noeud_hash FROM NoeudCourant) AND edg_dir = 'O'
-            ) AS s
-            JOIN NoeudsAvecId n ON n.noeud_hash = HASHBYTES('SHA2_256', s.Noeud);";
+            SELECT
+                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
+                t.noeuds1lie AS Noeud,
+                t.transformation AS Transformation
+            FROM table1 t
+            INNER JOIN NoeudActuel n ON t.noeuds1 = n.noeuds1
+            WHERE t.edg_dir = 'I'
+            UNION
+            SELECT
+                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
+                t.noeuds1 AS Noeud,
+                t.transformation AS Transformation
+            FROM table1 t
+            INNER JOIN NoeudActuel n ON t.noeuds1lie = n.noeuds1
+            WHERE t.edg_dir = 'O';";
 
         using var connection = new SqlConnection(_connectionString);
-        var result = await connection.QueryAsync<LignageDto>(sql, new { Id = id });
+        var result = await connection.QueryAsync<LignageDto>(sql,
+            new { LnaUid = lnaUid, LinUid = linUid, EdgDir = edgDir });
         return result.ToList();
     }
 
-    public async Task<List<LignageDto>> GetPredecesseursAsync(int id)
+    public async Task<List<LignageDto>> GetPredecesseursAsync(string lnaUid, string linUid, string edgDir)
     {
+        // Optimisé: une seule requête avec JOIN
         const string sql = @"
-            WITH NoeudsAvecId AS (
-                SELECT ROW_NUMBER() OVER (ORDER BY HASHBYTES('SHA2_256', noeud)) AS Id,
-                       noeud,
-                       HASHBYTES('SHA2_256', noeud) AS noeud_hash
-                FROM (
-                    SELECT DISTINCT noeud
-                    FROM (
-                        SELECT noeuds1 AS noeud FROM table1
-                        UNION
-                        SELECT noeuds1lie AS noeud FROM table1
-                    ) AS tous_noeuds
-                ) AS noeuds_uniques
-            ),
-            NoeudCourant AS (
-                SELECT noeud_hash FROM NoeudsAvecId WHERE Id = @Id
+            WITH NoeudActuel AS (
+                SELECT noeuds1 FROM table1
+                WHERE lna_uid = @LnaUid AND lin_uid = @LinUid AND edg_dir = @EdgDir
             )
-            SELECT n.Id, p.Noeud, p.Transformation
-            FROM (
-                SELECT noeuds1lie AS Noeud, transformation AS Transformation
-                FROM table1
-                WHERE HASHBYTES('SHA2_256', noeuds1) = (SELECT noeud_hash FROM NoeudCourant) AND edg_dir = 'O'
-                UNION
-                SELECT noeuds1 AS Noeud, transformation AS Transformation
-                FROM table1
-                WHERE HASHBYTES('SHA2_256', noeuds1lie) = (SELECT noeud_hash FROM NoeudCourant) AND edg_dir = 'I'
-            ) AS p
-            JOIN NoeudsAvecId n ON n.noeud_hash = HASHBYTES('SHA2_256', p.Noeud);";
+            SELECT
+                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
+                t.noeuds1lie AS Noeud,
+                t.transformation AS Transformation
+            FROM table1 t
+            INNER JOIN NoeudActuel n ON t.noeuds1 = n.noeuds1
+            WHERE t.edg_dir = 'O'
+            UNION
+            SELECT
+                t.lna_uid + '|' + t.lin_uid + '|' + t.edg_dir AS Id,
+                t.noeuds1 AS Noeud,
+                t.transformation AS Transformation
+            FROM table1 t
+            INNER JOIN NoeudActuel n ON t.noeuds1lie = n.noeuds1
+            WHERE t.edg_dir = 'I';";
 
         using var connection = new SqlConnection(_connectionString);
-        var result = await connection.QueryAsync<LignageDto>(sql, new { Id = id });
+        var result = await connection.QueryAsync<LignageDto>(sql,
+            new { LnaUid = lnaUid, LinUid = linUid, EdgDir = edgDir });
         return result.ToList();
     }
 
-    public async Task<ProgrammeDto?> GetProgrammeAsync(int id)
+    public async Task<ProgrammeDto?> GetProgrammeAsync(string lnaUid)
     {
         const string sql = @"
-            WITH NoeudsAvecId AS (
-                SELECT ROW_NUMBER() OVER (ORDER BY HASHBYTES('SHA2_256', noeud)) AS Id,
-                       noeud
-                FROM (
-                    SELECT DISTINCT noeud
-                    FROM (
-                        SELECT noeuds1 AS noeud FROM table1
-                        UNION
-                        SELECT noeuds1lie AS noeud FROM table1
-                    ) AS tous_noeuds
-                ) AS noeuds_uniques
-            )
-            SELECT TOP 1 t2.programme AS Programme, t2.version AS Version
-            FROM NoeudsAvecId n
-            JOIN table1 t1 ON t1.noeuds1 = n.noeud
-            JOIN table2 t2 ON t2.lna_uid = t1.lna_uid
-            WHERE n.Id = @Id;";
+            SELECT programme AS Programme, version AS Version
+            FROM table2
+            WHERE lna_uid = @LnaUid;";
 
         using var connection = new SqlConnection(_connectionString);
-        return await connection.QueryFirstOrDefaultAsync<ProgrammeDto>(sql, new { Id = id });
+        return await connection.QueryFirstOrDefaultAsync<ProgrammeDto>(sql, new { LnaUid = lnaUid });
     }
 }

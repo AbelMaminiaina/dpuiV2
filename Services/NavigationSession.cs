@@ -4,29 +4,78 @@ namespace LignageApp.Services;
 
 public class NavigationSession
 {
-    private readonly Stack<HistoriqueEntry> _historiqueNavigation = new();
+    private readonly List<HistoriqueEntry> _historiqueNavigation = new();
+    private int _indexActuel = -1;
 
-    public int IdActuel { get; set; }
-    public string NoeudActuel { get; set; }
+    public string IdActuel { get; set; } = string.Empty;  // Format: LnaUid_LinUid_EdgDir
+    public string NoeudActuel { get; set; } = string.Empty;
 
-    public void Empiler(HistoriqueEntry entree) => _historiqueNavigation.Push(entree);
-
-    public HistoriqueEntry Depiler() =>
-        _historiqueNavigation.Count > 0 ? _historiqueNavigation.Pop() : null;
-
-    public HistoriqueEntry? Consulter() =>
-        _historiqueNavigation.Count > 0 ? _historiqueNavigation.Peek() : null;
-
-    public bool PeutRevenirEnArriere => _historiqueNavigation.Count > 0;
-
-    public List<HistoriqueEntry> ObtenirHistorique() =>
-        _historiqueNavigation.Reverse().ToList();
-
-    public void RevenirJusquA(int id)
+    public void Ajouter(HistoriqueEntry entree)
     {
-        while (_historiqueNavigation.Count > 0 && _historiqueNavigation.Peek().Id != id)
-            _historiqueNavigation.Pop();
+        if (_indexActuel < _historiqueNavigation.Count - 1)
+        {
+            _historiqueNavigation.RemoveRange(_indexActuel + 1, _historiqueNavigation.Count - _indexActuel - 1);
+        }
+        _historiqueNavigation.Add(entree);
+        _indexActuel = _historiqueNavigation.Count - 1;
     }
 
-    public void Reinitialiser() => _historiqueNavigation.Clear();
+    public HistoriqueEntry? Precedent()
+    {
+        if (_indexActuel > 0)
+        {
+            _indexActuel--;
+            return _historiqueNavigation[_indexActuel];
+        }
+        return null;
+    }
+
+    public HistoriqueEntry? PrecedentAvecSuppression()
+    {
+        if (_historiqueNavigation.Count > 1)
+        {
+            _historiqueNavigation.RemoveAt(_historiqueNavigation.Count - 1);
+            _indexActuel = _historiqueNavigation.Count - 1;
+            return _historiqueNavigation[_indexActuel];
+        }
+        return null;
+    }
+
+    public HistoriqueEntry? Suivant()
+    {
+        if (_indexActuel < _historiqueNavigation.Count - 1)
+        {
+            _indexActuel++;
+            return _historiqueNavigation[_indexActuel];
+        }
+        return null;
+    }
+
+    public HistoriqueEntry? Consulter() =>
+        _indexActuel >= 0 && _indexActuel < _historiqueNavigation.Count
+            ? _historiqueNavigation[_indexActuel]
+            : null;
+
+    public bool PeutRevenirEnArriere => _indexActuel > 0;
+    public bool PeutAllerEnAvant => _indexActuel < _historiqueNavigation.Count - 1;
+
+    public List<HistoriqueEntry> ObtenirHistorique() => _historiqueNavigation.ToList();
+
+    public int IndexActuel => _indexActuel;
+
+    public void AllerA(int index)
+    {
+        if (index >= 0 && index < _historiqueNavigation.Count)
+        {
+            _indexActuel = index;
+        }
+    }
+
+    public void Reinitialiser()
+    {
+        _historiqueNavigation.Clear();
+        _indexActuel = -1;
+        IdActuel = string.Empty;
+        NoeudActuel = string.Empty;
+    }
 }
