@@ -13,40 +13,35 @@ public class LignageRepository : ILignageRepository
         _connectionString = configuration.GetConnectionString("LignageDb2") ?? string.Empty;
     }
 
-    // SQL helper to concatenate fields with '.' (compatible SQL Server 2014+)
-    private const string ConcatDta = @"STUFF(
-        CASE WHEN DTA_1 IS NOT NULL AND DTA_1 <> '' THEN '.' + DTA_1 ELSE '' END +
-        CASE WHEN DTA_2 IS NOT NULL AND DTA_2 <> '' THEN '.' + DTA_2 ELSE '' END +
-        CASE WHEN DTA_3 IS NOT NULL AND DTA_3 <> '' THEN '.' + DTA_3 ELSE '' END +
-        CASE WHEN DTA_4 IS NOT NULL AND DTA_4 <> '' THEN '.' + DTA_4 ELSE '' END,
-        1, 1, '')";
-
-    private const string ConcatEdg = @"STUFF(
-        CASE WHEN EDG_1 IS NOT NULL AND EDG_1 <> '' THEN '.' + EDG_1 ELSE '' END +
-        CASE WHEN EDG_2 IS NOT NULL AND EDG_2 <> '' THEN '.' + EDG_2 ELSE '' END +
-        CASE WHEN EDG_3 IS NOT NULL AND EDG_3 <> '' THEN '.' + EDG_3 ELSE '' END +
-        CASE WHEN EDG_4 IS NOT NULL AND EDG_4 <> '' THEN '.' + EDG_4 ELSE '' END,
-        1, 1, '')";
-
     public async Task<List<NodeDto>> GetDistinctNodesAsync()
     {
-        // Concatenate DTA_1-4 with '.' to create the full node
-        string sql = $@"
-            WITH NodesWithPK AS (
+        string sql = @"
+            SELECT
+                sub.LanUid + '|' + sub.LinUid + '|' + sub.EdgDir + '|D' AS Id,
+                sub.Node
+            FROM (
                 SELECT
-                    {ConcatDta} AS Node,
+                    STUFF(
+                        CASE WHEN DTA_1 IS NOT NULL AND DTA_1 <> '' THEN '.' + DTA_1 ELSE '' END +
+                        CASE WHEN DTA_2 IS NOT NULL AND DTA_2 <> '' THEN '.' + DTA_2 ELSE '' END +
+                        CASE WHEN DTA_3 IS NOT NULL AND DTA_3 <> '' THEN '.' + DTA_3 ELSE '' END +
+                        CASE WHEN DTA_4 IS NOT NULL AND DTA_4 <> '' THEN '.' + DTA_4 ELSE '' END,
+                        1, 1, '') AS Node,
                     LAN_UID AS LanUid,
                     LIN_UID AS LinUid,
                     EDG_DIR AS EdgDir,
-                    ROW_NUMBER() OVER (PARTITION BY {ConcatDta} ORDER BY LAN_UID, LIN_UID) AS rn
+                    ROW_NUMBER() OVER (PARTITION BY
+                        STUFF(
+                            CASE WHEN DTA_1 IS NOT NULL AND DTA_1 <> '' THEN '.' + DTA_1 ELSE '' END +
+                            CASE WHEN DTA_2 IS NOT NULL AND DTA_2 <> '' THEN '.' + DTA_2 ELSE '' END +
+                            CASE WHEN DTA_3 IS NOT NULL AND DTA_3 <> '' THEN '.' + DTA_3 ELSE '' END +
+                            CASE WHEN DTA_4 IS NOT NULL AND DTA_4 <> '' THEN '.' + DTA_4 ELSE '' END,
+                            1, 1, '')
+                        ORDER BY LAN_UID, LIN_UID) AS rn
                 FROM LINE_VIS_EDG
-            )
-            SELECT
-                LanUid + '|' + LinUid + '|' + EdgDir AS Id,
-                Node
-            FROM NodesWithPK
-            WHERE rn = 1
-            ORDER BY Node;";
+            ) sub
+            WHERE sub.rn = 1
+            ORDER BY sub.Node;";
 
         using var connection = new SqlConnection(_connectionString);
         var result = await connection.QueryAsync<NodeDto>(sql);
@@ -77,69 +72,135 @@ public class LignageRepository : ILignageRepository
             new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir });
     }
 
-    public async Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir, bool useEdg = false, int maxRes = 500)
     {
-        // Compare 4 columns DTA_1-4 with EDG_1-4 to find successors
+        var nodeCol1 = useEdg ? "EDG_1" : "DTA_1";
+        var nodeCol2 = useEdg ? "EDG_2" : "DTA_2";
+        var nodeCol3 = useEdg ? "EDG_3" : "DTA_3";
+        var nodeCol4 = useEdg ? "EDG_4" : "DTA_4";
+
         string sql = $@"
-            WITH CurrentNode AS (
-                SELECT DTA_1, DTA_2, DTA_3, DTA_4
-                FROM LINE_VIS_EDG
-                WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir
-            )
-            -- EDG_DIR='I': DTA is predecessor of EDG, so EDG is successor
-            SELECT
-                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
-                {ConcatEdg.Replace("EDG_", "t.EDG_")} AS Node,
-                t.TXN_TRI AS Transformation
+            SET NOCOUNT ON;
+
+            CREATE TABLE #CurrentNode (N1 VARCHAR(MAX), N2 VARCHAR(MAX), N3 VARCHAR(MAX), N4 VARCHAR(MAX));
+            INSERT INTO #CurrentNode SELECT {nodeCol1}, {nodeCol2}, {nodeCol3}, {nodeCol4}
+            FROM LINE_VIS_EDG WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir;
+
+            CREATE TABLE #Successors (S1 VARCHAR(MAX), S2 VARCHAR(MAX), S3 VARCHAR(MAX), S4 VARCHAR(MAX), TXN_TRI VARCHAR(1000));
+
+            INSERT INTO #Successors
+            SELECT TOP (@MaxRes) t.EDG_1, t.EDG_2, t.EDG_3, t.EDG_4, t.TXN_TRI
             FROM LINE_VIS_EDG t
-            INNER JOIN CurrentNode n ON ISNULL(t.DTA_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.DTA_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.DTA_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.DTA_4,'') = ISNULL(n.DTA_4,'')
-            WHERE t.EDG_DIR = 'I'
-            UNION
-            -- EDG_DIR='O': EDG is predecessor of DTA, so DTA is successor
-            SELECT
-                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
-                {ConcatDta.Replace("DTA_", "t.DTA_")} AS Node,
-                t.TXN_TRI AS Transformation
+            INNER JOIN #CurrentNode n ON ISNULL(t.DTA_1,'') = ISNULL(n.N1,'')
+                AND ISNULL(t.DTA_2,'') = ISNULL(n.N2,'')
+                AND ISNULL(t.DTA_3,'') = ISNULL(n.N3,'')
+                AND ISNULL(t.DTA_4,'') = ISNULL(n.N4,'')
+            WHERE t.EDG_DIR = 'I';
+
+            INSERT INTO #Successors
+            SELECT TOP (@MaxRes) t.DTA_1, t.DTA_2, t.DTA_3, t.DTA_4, t.TXN_TRI
             FROM LINE_VIS_EDG t
-            INNER JOIN CurrentNode n ON ISNULL(t.EDG_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.EDG_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.EDG_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.EDG_4,'') = ISNULL(n.DTA_4,'')
-            WHERE t.EDG_DIR = 'O';";
+            INNER JOIN #CurrentNode n ON ISNULL(t.EDG_1,'') = ISNULL(n.N1,'')
+                AND ISNULL(t.EDG_2,'') = ISNULL(n.N2,'')
+                AND ISNULL(t.EDG_3,'') = ISNULL(n.N3,'')
+                AND ISNULL(t.EDG_4,'') = ISNULL(n.N4,'')
+            WHERE t.EDG_DIR = 'O';
+
+            SET NOCOUNT OFF;
+
+            SELECT TOP (@MaxRes)
+                COALESCE(d.Id, e.Id) AS Id,
+                STUFF(
+                    CASE WHEN s.S1 IS NOT NULL AND s.S1 <> '' THEN '.' + s.S1 ELSE '' END +
+                    CASE WHEN s.S2 IS NOT NULL AND s.S2 <> '' THEN '.' + s.S2 ELSE '' END +
+                    CASE WHEN s.S3 IS NOT NULL AND s.S3 <> '' THEN '.' + s.S3 ELSE '' END +
+                    CASE WHEN s.S4 IS NOT NULL AND s.S4 <> '' THEN '.' + s.S4 ELSE '' END,
+                    1, 1, '') AS Node,
+                s.TXN_TRI AS Transformation
+            FROM #Successors s
+            LEFT JOIN (
+                SELECT ISNULL(DTA_1,'') AS D1, ISNULL(DTA_2,'') AS D2, ISNULL(DTA_3,'') AS D3, ISNULL(DTA_4,'') AS D4,
+                       MIN(LAN_UID + '|' + LIN_UID + '|' + EDG_DIR + '|D') AS Id
+                FROM LINE_VIS_EDG GROUP BY ISNULL(DTA_1,''), ISNULL(DTA_2,''), ISNULL(DTA_3,''), ISNULL(DTA_4,'')
+            ) d ON d.D1 = ISNULL(s.S1,'') AND d.D2 = ISNULL(s.S2,'') AND d.D3 = ISNULL(s.S3,'') AND d.D4 = ISNULL(s.S4,'')
+            LEFT JOIN (
+                SELECT ISNULL(EDG_1,'') AS E1, ISNULL(EDG_2,'') AS E2, ISNULL(EDG_3,'') AS E3, ISNULL(EDG_4,'') AS E4,
+                       MIN(LAN_UID + '|' + LIN_UID + '|' + EDG_DIR + '|E') AS Id
+                FROM LINE_VIS_EDG GROUP BY ISNULL(EDG_1,''), ISNULL(EDG_2,''), ISNULL(EDG_3,''), ISNULL(EDG_4,'')
+            ) e ON e.E1 = ISNULL(s.S1,'') AND e.E2 = ISNULL(s.S2,'') AND e.E3 = ISNULL(s.S3,'') AND e.E4 = ISNULL(s.S4,'');
+
+            DROP TABLE #CurrentNode;
+            DROP TABLE #Successors;";
 
         using var connection = new SqlConnection(_connectionString);
         var result = await connection.QueryAsync<LineageDto>(sql,
-            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir });
+            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir, MaxRes = maxRes });
         return result.ToList();
     }
 
-    public async Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir, bool useEdg = false, int maxRes = 500)
     {
-        // Compare 4 columns DTA_1-4 with EDG_1-4 to find predecessors
+        var nodeCol1 = useEdg ? "EDG_1" : "DTA_1";
+        var nodeCol2 = useEdg ? "EDG_2" : "DTA_2";
+        var nodeCol3 = useEdg ? "EDG_3" : "DTA_3";
+        var nodeCol4 = useEdg ? "EDG_4" : "DTA_4";
+
         string sql = $@"
-            WITH CurrentNode AS (
-                SELECT DTA_1, DTA_2, DTA_3, DTA_4
-                FROM LINE_VIS_EDG
-                WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir
-            )
-            -- EDG_DIR='O': EDG is predecessor of DTA, so if DTA=node, EDG is predecessor
-            SELECT
-                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
-                {ConcatEdg.Replace("EDG_", "t.EDG_")} AS Node,
-                t.TXN_TRI AS Transformation
+            SET NOCOUNT ON;
+
+            CREATE TABLE #CurrentNode (N1 VARCHAR(MAX), N2 VARCHAR(MAX), N3 VARCHAR(MAX), N4 VARCHAR(MAX));
+            INSERT INTO #CurrentNode SELECT {nodeCol1}, {nodeCol2}, {nodeCol3}, {nodeCol4}
+            FROM LINE_VIS_EDG WHERE LAN_UID = @LanUid AND LIN_UID = @LinUid AND EDG_DIR = @EdgDir;
+
+            CREATE TABLE #Predecessors (P1 VARCHAR(MAX), P2 VARCHAR(MAX), P3 VARCHAR(MAX), P4 VARCHAR(MAX), TXN_TRI VARCHAR(1000));
+
+            INSERT INTO #Predecessors
+            SELECT TOP (@MaxRes) t.EDG_1, t.EDG_2, t.EDG_3, t.EDG_4, t.TXN_TRI
             FROM LINE_VIS_EDG t
-            INNER JOIN CurrentNode n ON ISNULL(t.DTA_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.DTA_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.DTA_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.DTA_4,'') = ISNULL(n.DTA_4,'')
-            WHERE t.EDG_DIR = 'O'
-            UNION
-            -- EDG_DIR='I': DTA is predecessor of EDG, so if EDG=node, DTA is predecessor
-            SELECT
-                t.LAN_UID + '|' + t.LIN_UID + '|' + t.EDG_DIR AS Id,
-                {ConcatDta.Replace("DTA_", "t.DTA_")} AS Node,
-                t.TXN_TRI AS Transformation
+            INNER JOIN #CurrentNode n ON ISNULL(t.DTA_1,'') = ISNULL(n.N1,'')
+                AND ISNULL(t.DTA_2,'') = ISNULL(n.N2,'')
+                AND ISNULL(t.DTA_3,'') = ISNULL(n.N3,'')
+                AND ISNULL(t.DTA_4,'') = ISNULL(n.N4,'')
+            WHERE t.EDG_DIR = 'O';
+
+            INSERT INTO #Predecessors
+            SELECT TOP (@MaxRes) t.DTA_1, t.DTA_2, t.DTA_3, t.DTA_4, t.TXN_TRI
             FROM LINE_VIS_EDG t
-            INNER JOIN CurrentNode n ON ISNULL(t.EDG_1,'') = ISNULL(n.DTA_1,'') AND ISNULL(t.EDG_2,'') = ISNULL(n.DTA_2,'') AND ISNULL(t.EDG_3,'') = ISNULL(n.DTA_3,'') AND ISNULL(t.EDG_4,'') = ISNULL(n.DTA_4,'')
-            WHERE t.EDG_DIR = 'I';";
+            INNER JOIN #CurrentNode n ON ISNULL(t.EDG_1,'') = ISNULL(n.N1,'')
+                AND ISNULL(t.EDG_2,'') = ISNULL(n.N2,'')
+                AND ISNULL(t.EDG_3,'') = ISNULL(n.N3,'')
+                AND ISNULL(t.EDG_4,'') = ISNULL(n.N4,'')
+            WHERE t.EDG_DIR = 'I';
+
+            SET NOCOUNT OFF;
+
+            SELECT TOP (@MaxRes)
+                COALESCE(d.Id, e.Id) AS Id,
+                STUFF(
+                    CASE WHEN p.P1 IS NOT NULL AND p.P1 <> '' THEN '.' + p.P1 ELSE '' END +
+                    CASE WHEN p.P2 IS NOT NULL AND p.P2 <> '' THEN '.' + p.P2 ELSE '' END +
+                    CASE WHEN p.P3 IS NOT NULL AND p.P3 <> '' THEN '.' + p.P3 ELSE '' END +
+                    CASE WHEN p.P4 IS NOT NULL AND p.P4 <> '' THEN '.' + p.P4 ELSE '' END,
+                    1, 1, '') AS Node,
+                p.TXN_TRI AS Transformation
+            FROM #Predecessors p
+            LEFT JOIN (
+                SELECT ISNULL(DTA_1,'') AS D1, ISNULL(DTA_2,'') AS D2, ISNULL(DTA_3,'') AS D3, ISNULL(DTA_4,'') AS D4,
+                       MIN(LAN_UID + '|' + LIN_UID + '|' + EDG_DIR + '|D') AS Id
+                FROM LINE_VIS_EDG GROUP BY ISNULL(DTA_1,''), ISNULL(DTA_2,''), ISNULL(DTA_3,''), ISNULL(DTA_4,'')
+            ) d ON d.D1 = ISNULL(p.P1,'') AND d.D2 = ISNULL(p.P2,'') AND d.D3 = ISNULL(p.P3,'') AND d.D4 = ISNULL(p.P4,'')
+            LEFT JOIN (
+                SELECT ISNULL(EDG_1,'') AS E1, ISNULL(EDG_2,'') AS E2, ISNULL(EDG_3,'') AS E3, ISNULL(EDG_4,'') AS E4,
+                       MIN(LAN_UID + '|' + LIN_UID + '|' + EDG_DIR + '|E') AS Id
+                FROM LINE_VIS_EDG GROUP BY ISNULL(EDG_1,''), ISNULL(EDG_2,''), ISNULL(EDG_3,''), ISNULL(EDG_4,'')
+            ) e ON e.E1 = ISNULL(p.P1,'') AND e.E2 = ISNULL(p.P2,'') AND e.E3 = ISNULL(p.P3,'') AND e.E4 = ISNULL(p.P4,'');
+
+            DROP TABLE #CurrentNode;
+            DROP TABLE #Predecessors;";
 
         using var connection = new SqlConnection(_connectionString);
         var result = await connection.QueryAsync<LineageDto>(sql,
-            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir });
+            new { LanUid = lanUid, LinUid = linUid, EdgDir = edgDir, MaxRes = maxRes });
         return result.ToList();
     }
 

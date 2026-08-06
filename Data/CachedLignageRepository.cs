@@ -36,24 +36,24 @@ public class CachedLignageRepository : ILignageRepository
         return row;
     }
 
-    public async Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetSuccessorsAsync(string lanUid, string linUid, string edgDir, bool useEdg = false, int maxRes = 500)
     {
-        var key = CacheKeys.Successors(lanUid, linUid, edgDir);
+        var key = CacheKeys.Successors(lanUid, linUid, edgDir) + (useEdg ? "_E" : "_D") + $"_{maxRes}";
         if (_cache.TryGet<List<LineageDto>>(key, out var cached) && cached != null)
             return cached;
 
-        var successors = await _repository.GetSuccessorsAsync(lanUid, linUid, edgDir);
+        var successors = await _repository.GetSuccessorsAsync(lanUid, linUid, edgDir, useEdg, maxRes);
         _cache.Set(key, successors, TimeSpan.FromMinutes(30));
         return successors;
     }
 
-    public async Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir)
+    public async Task<List<LineageDto>> GetPredecessorsAsync(string lanUid, string linUid, string edgDir, bool useEdg = false, int maxRes = 500)
     {
-        var key = CacheKeys.Predecessors(lanUid, linUid, edgDir);
+        var key = CacheKeys.Predecessors(lanUid, linUid, edgDir) + (useEdg ? "_E" : "_D") + $"_{maxRes}";
         if (_cache.TryGet<List<LineageDto>>(key, out var cached) && cached != null)
             return cached;
 
-        var predecessors = await _repository.GetPredecessorsAsync(lanUid, linUid, edgDir);
+        var predecessors = await _repository.GetPredecessorsAsync(lanUid, linUid, edgDir, useEdg, maxRes);
         _cache.Set(key, predecessors, TimeSpan.FromMinutes(30));
         return predecessors;
     }

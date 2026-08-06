@@ -36,14 +36,15 @@ public class ConsultationViewModel : INotifyPropertyChanged
 
     public async Task NavigateToAsync(string id)
     {
-        // id format: lanUid|linUid|edgDir
+        // id format: lanUid|linUid|edgDir|nodeType (D=DTA, E=EDG)
         var parts = id?.Split('|');
-        if (parts != null && parts.Length == 3)
+        if (parts != null && parts.Length >= 3)
         {
             var lanUid = Uri.UnescapeDataString(parts[0]);
             var linUid = Uri.UnescapeDataString(parts[1]);
             var edgDir = parts[2];
-            await _consultationService.NavigateToAsync(lanUid, linUid, edgDir);
+            var useEdg = parts.Length >= 4 && parts[3] == "E";
+            await _consultationService.NavigateToAsync(lanUid, linUid, edgDir, useEdg);
             Notify();
         }
     }

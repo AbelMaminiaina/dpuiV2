@@ -24,10 +24,10 @@ public class ConsultationService : IConsultationService
         _session = session;
     }
 
-    public async Task InitializeAsync(string lanUid, string linUid, string edgDir)
+    public async Task InitializeAsync(string lanUid, string linUid, string edgDir, bool useEdg = false)
     {
         _session.Reset();
-        await LoadFromDatabaseAsync(lanUid, linUid, edgDir);
+        await LoadFromDatabaseAsync(lanUid, linUid, edgDir, useEdg);
 
         _session.Add(new HistoryEntry
         {
@@ -39,9 +39,9 @@ public class ConsultationService : IConsultationService
         });
     }
 
-    public async Task NavigateToAsync(string lanUid, string linUid, string edgDir)
+    public async Task NavigateToAsync(string lanUid, string linUid, string edgDir, bool useEdg = false)
     {
-        await LoadFromDatabaseAsync(lanUid, linUid, edgDir);
+        await LoadFromDatabaseAsync(lanUid, linUid, edgDir, useEdg);
 
         _session.Add(new HistoryEntry
         {
@@ -82,15 +82,16 @@ public class ConsultationService : IConsultationService
             LoadFromHistory(entry);
     }
 
-    private async Task LoadFromDatabaseAsync(string lanUid, string linUid, string edgDir)
+    private async Task LoadFromDatabaseAsync(string lanUid, string linUid, string edgDir, bool useEdg = false)
     {
         var row = await _repository.GetByPKAsync(lanUid, linUid, edgDir);
         if (row != null)
         {
             _session.CurrentId = $"{lanUid}|{linUid}|{edgDir}";
-            _session.CurrentNode = row.SourceNode;
-            Successors = await _repository.GetSuccessorsAsync(lanUid, linUid, edgDir);
-            Predecessors = await _repository.GetPredecessorsAsync(lanUid, linUid, edgDir);
+            // Use EDG (LinkedNode) if useEdg is true, otherwise use DTA (SourceNode)
+            _session.CurrentNode = useEdg ? row.LinkedNode : row.SourceNode;
+            Successors = await _repository.GetSuccessorsAsync(lanUid, linUid, edgDir, useEdg);
+            Predecessors = await _repository.GetPredecessorsAsync(lanUid, linUid, edgDir, useEdg);
             Program = await _repository.GetProgramAsync(lanUid);
         }
     }

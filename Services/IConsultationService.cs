@@ -14,8 +14,8 @@ public interface IConsultationService
     List<HistoryEntry> History { get; }
     int CurrentIndex { get; }
 
-    Task InitializeAsync(string lanUid, string linUid, string edgDir);
-    Task NavigateToAsync(string lanUid, string linUid, string edgDir);
+    Task InitializeAsync(string lanUid, string linUid, string edgDir, bool useEdg = false);
+    Task NavigateToAsync(string lanUid, string linUid, string edgDir, bool useEdg = false);
     void GoBack();
     void GoBackWithRemove();
     void GoForward();

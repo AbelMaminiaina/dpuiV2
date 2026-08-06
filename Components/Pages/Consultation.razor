@@ -110,10 +110,10 @@
     {
         if (!string.IsNullOrEmpty(Pk))
         {
-            // Decode URL parameter (format: lanUid|linUid|edgDir)
+            // Decode URL parameter (format: lanUid|linUid|edgDir or lanUid|linUid|edgDir|D/E)
             var decoded = Uri.UnescapeDataString(Pk);
             var parts = decoded.Split('|');
-            if (parts.Length == 3)
+            if (parts.Length >= 3)
             {
                 var lanUid = Uri.UnescapeDataString(parts[0]);
                 var linUid = Uri.UnescapeDataString(parts[1]);
