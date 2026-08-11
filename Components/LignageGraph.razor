@@ -58,70 +58,68 @@
         var nodeSet = new HashSet<string>();
         var linkSet = new HashSet<string>(); // Pour éviter les doublons de liens
 
-        // Helper pour ajouter un lien sans doublon
+        // Helper pour ajouter un lien sans doublon - USE FULL NAMES for identification
         void AddLink(string from, string to)
         {
             var linkKey = $"{from}|{to}";
-            if (!linkSet.Contains(linkKey) && from != to)
+            if (!linkSet.Contains(linkKey) && from != to && !string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(to))
             {
                 linkSet.Add(linkKey);
                 links.Add(new { from = from, to = to });
             }
         }
 
-        // Current node (green)
-        var currentNodeTrunc = Truncate(CurrentNode, 20);
-        nodeSet.Add(currentNodeTrunc);
-        nodes.Add(new { id = currentNodeTrunc, color = "#4CAF50", marker = new { radius = 25 } });
-
-        // Predecessors du noeud actuel (blue)
-        foreach (var p in Predecessors)
+        // Helper pour ajouter un noeud - USE FULL NAME for id, truncated for display
+        void AddNode(string fullName, string color, int radius)
         {
-            var pTrunc = Truncate(p.Node, 20);
-            if (!nodeSet.Contains(pTrunc))
+            if (!nodeSet.Contains(fullName) && !string.IsNullOrEmpty(fullName))
             {
-                nodeSet.Add(pTrunc);
-                nodes.Add(new { id = pTrunc, color = "#2196F3", marker = new { radius = 15 } });
+                nodeSet.Add(fullName);
+                nodes.Add(new {
+                    id = fullName,
+                    name = Truncate(fullName, 30),  // Display name (truncated)
+                    color = color,
+                    marker = new { radius = radius }
+                });
             }
-            AddLink(pTrunc, currentNodeTrunc);
         }
 
-        // Successors du noeud actuel (orange)
+        // Current node (green) - USE FULL NAME
+        var currentNodeFull = CurrentNode ?? "";
+        AddNode(currentNodeFull, "#4CAF50", 25);
+
+        // Predecessors du noeud actuel (blue) - USE FULL NAMES
+        foreach (var p in Predecessors)
+        {
+            var pFull = p.Node ?? "";
+            AddNode(pFull, "#2196F3", 15);
+            AddLink(pFull, currentNodeFull);
+        }
+
+        // Successors du noeud actuel (orange) - USE FULL NAMES
         foreach (var s in Successors)
         {
-            var sTrunc = Truncate(s.Node, 20);
-            if (!nodeSet.Contains(sTrunc))
-            {
-                nodeSet.Add(sTrunc);
-                nodes.Add(new { id = sTrunc, color = "#FF9800", marker = new { radius = 15 } });
-            }
-            AddLink(currentNodeTrunc, sTrunc);
+            var sFull = s.Node ?? "";
+            AddNode(sFull, "#FF9800", 15);
+            AddLink(currentNodeFull, sFull);
         }
 
         // History: Parcourir chaque entrée et afficher ses successeurs/prédécesseurs
         foreach (var entry in History)
         {
-            var entryTrunc = Truncate(entry.Node, 20);
+            var entryFull = entry.Node ?? "";
 
-            // Ajouter le noeud de l'historique s'il n'existe pas
-            if (!nodeSet.Contains(entryTrunc))
-            {
-                nodeSet.Add(entryTrunc);
-                nodes.Add(new { id = entryTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
-            }
+            // Ajouter le noeud de l'historique s'il n'existe pas (gris)
+            AddNode(entryFull, "#9E9E9E", 12);
 
             // Ajouter les prédécesseurs de chaque entrée de l'historique (bleu clair)
             if (entry.Predecessors != null)
             {
                 foreach (var p in entry.Predecessors)
                 {
-                    var pTrunc = Truncate(p.Node, 20);
-                    if (!nodeSet.Contains(pTrunc))
-                    {
-                        nodeSet.Add(pTrunc);
-                        nodes.Add(new { id = pTrunc, color = "#90CAF9", marker = new { radius = 10 } });
-                    }
-                    AddLink(pTrunc, entryTrunc);
+                    var pFull = p.Node ?? "";
+                    AddNode(pFull, "#90CAF9", 10);
+                    AddLink(pFull, entryFull);
                 }
             }
 
@@ -130,13 +128,9 @@
             {
                 foreach (var s in entry.Successors)
                 {
-                    var sTrunc = Truncate(s.Node, 20);
-                    if (!nodeSet.Contains(sTrunc))
-                    {
-                        nodeSet.Add(sTrunc);
-                        nodes.Add(new { id = sTrunc, color = "#FFCC80", marker = new { radius = 10 } });
-                    }
-                    AddLink(entryTrunc, sTrunc);
+                    var sFull = s.Node ?? "";
+                    AddNode(sFull, "#FFCC80", 10);
+                    AddLink(entryFull, sFull);
                 }
             }
         }
@@ -144,9 +138,9 @@
         // Liens entre les noeuds de l'historique (parcours)
         for (int i = 0; i < History.Count - 1; i++)
         {
-            var fromTrunc = Truncate(History[i].Node, 20);
-            var toTrunc = Truncate(History[i + 1].Node, 20);
-            AddLink(fromTrunc, toTrunc);
+            var fromFull = History[i].Node ?? "";
+            var toFull = History[i + 1].Node ?? "";
+            AddLink(fromFull, toFull);
         }
 
         // Remplir les variables de débogage
@@ -191,7 +185,8 @@
                     {
                         enabled = true,
                         linkFormat = "",
-                        style = new { fontSize = "11px", fontWeight = "normal" },
+                        format = "{point.name}",  // Use name property for display
+                        style = new { fontSize = "10px", fontWeight = "normal" },
                         y = -10
                     },
                     link = new
@@ -212,4 +207,5 @@
             return text;
         return text.Substring(0, max) + "...";
     }
+
 }
