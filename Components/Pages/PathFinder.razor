@@ -1,0 +1,208 @@
+@page "/pathfinder"
+@inject LignageApp.ViewModels.PathFinderViewModel ViewModel
+@implements IDisposable
+@rendermode InteractiveServer
+
+<h3>Path Finder</h3>
+<p>Find a path between two nodes in the lineage graph.</p>
+
+<div style="display:flex; gap:40px; margin-bottom:20px">
+    <!-- Start Node -->
+    <div style="flex:1">
+        <label><strong>Start Node</strong></label>
+        <div style="position:relative">
+            <input type="text"
+                   class="form-control"
+                   placeholder="Search start node..."
+                   @bind="ViewModel.StartSearchTerm"
+                   @bind:event="oninput"
+                   @onkeyup="OnStartSearchKeyUp" />
+            @if (ViewModel.StartSearchResults.Count > 0)
+            {
+                <div class="dropdown-menu show" style="position:absolute; width:100%; max-height:300px; overflow-y:auto">
+                    @foreach (var node in ViewModel.StartSearchResults)
+                    {
+                        <button class="dropdown-item" @onclick="() => ViewModel.SelectStartNode(node)">
+                            @node.Node
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+        @if (ViewModel.SelectedStartNode != null)
+        {
+            <div style="margin-top:5px; padding:8px; background:#e8f5e9; border-radius:4px">
+                Selected: <strong>@ViewModel.SelectedStartNode.Node</strong>
+            </div>
+        }
+    </div>
+
+    <!-- End Node -->
+    <div style="flex:1">
+        <label><strong>End Node</strong></label>
+        <div style="position:relative">
+            <input type="text"
+                   class="form-control"
+                   placeholder="Search end node..."
+                   @bind="ViewModel.EndSearchTerm"
+                   @bind:event="oninput"
+                   @onkeyup="OnEndSearchKeyUp" />
+            @if (ViewModel.EndSearchResults.Count > 0)
+            {
+                <div class="dropdown-menu show" style="position:absolute; width:100%; max-height:300px; overflow-y:auto">
+                    @foreach (var node in ViewModel.EndSearchResults)
+                    {
+                        <button class="dropdown-item" @onclick="() => ViewModel.SelectEndNode(node)">
+                            @node.Node
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+        @if (ViewModel.SelectedEndNode != null)
+        {
+            <div style="margin-top:5px; padding:8px; background:#fff3e0; border-radius:4px">
+                Selected: <strong>@ViewModel.SelectedEndNode.Node</strong>
+            </div>
+        }
+    </div>
+</div>
+
+<div style="margin-bottom:20px">
+    <button class="btn btn-primary" @onclick="ViewModel.FindPathAsync" disabled="@ViewModel.IsSearching">
+        @if (ViewModel.IsSearching)
+        {
+            <span>Searching...</span>
+        }
+        else
+        {
+            <span>Find Path</span>
+        }
+    </button>
+    <button class="btn btn-secondary" @onclick="ViewModel.Reset" style="margin-left:10px">
+        Reset
+    </button>
+</div>
+
+@if (!string.IsNullOrEmpty(ViewModel.ErrorMessage))
+{
+    <div class="alert alert-warning">
+        @ViewModel.ErrorMessage
+    </div>
+}
+
+@if (ViewModel.Result != null && ViewModel.Result.PathExists)
+{
+    <div class="alert alert-success">
+        Path found with @ViewModel.Result.TotalSteps step(s)
+    </div>
+
+    <h4>Path Details</h4>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Step</th>
+                <th>Node</th>
+                <th>Transformation</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var step in ViewModel.Result.Steps)
+            {
+                <tr>
+                    <td>@step.Order</td>
+                    <td title="@step.Node">@Truncate(step.Node, 60)</td>
+                    <td>@(string.IsNullOrEmpty(step.Transformation) ? "-" : step.Transformation)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <!-- Visual representation -->
+    <h4>Visual Path</h4>
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:15px; background:#f5f5f5; border-radius:5px">
+        @for (int i = 0; i < ViewModel.Result.Steps.Count; i++)
+        {
+            var step = ViewModel.Result.Steps[i];
+            var isFirst = i == 0;
+            var isLast = i == ViewModel.Result.Steps.Count - 1;
+            var bgColor = isFirst ? "#4CAF50" : (isLast ? "#FF9800" : "#2196F3");
+
+            <div style="padding:10px 15px; background:@bgColor; color:white; border-radius:5px; max-width:200px; word-break:break-all"
+                 title="@step.Node">
+                @Truncate(step.Node, 25)
+            </div>
+            @if (!isLast)
+            {
+                <div style="font-size:24px; color:#666">
+                    -->
+                </div>
+            }
+        }
+    </div>
+}
+
+@code {
+    private System.Timers.Timer? _startDebounceTimer;
+    private System.Timers.Timer? _endDebounceTimer;
+
+    protected override void OnInitialized()
+    {
+        ViewModel.PropertyChanged += OnViewModelChanged;
+    }
+
+    private async void OnViewModelChanged(object? sender, EventArgs e)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnStartSearchKeyUp(KeyboardEventArgs e)
+    {
+        _startDebounceTimer?.Stop();
+        _startDebounceTimer?.Dispose();
+
+        _startDebounceTimer = new System.Timers.Timer(300);
+        _startDebounceTimer.Elapsed += async (s, args) =>
+        {
+            _startDebounceTimer?.Stop();
+            await InvokeAsync(async () =>
+            {
+                await ViewModel.SearchStartNodesAsync();
+                StateHasChanged();
+            });
+        };
+        _startDebounceTimer.Start();
+    }
+
+    private void OnEndSearchKeyUp(KeyboardEventArgs e)
+    {
+        _endDebounceTimer?.Stop();
+        _endDebounceTimer?.Dispose();
+
+        _endDebounceTimer = new System.Timers.Timer(300);
+        _endDebounceTimer.Elapsed += async (s, args) =>
+        {
+            _endDebounceTimer?.Stop();
+            await InvokeAsync(async () =>
+            {
+                await ViewModel.SearchEndNodesAsync();
+                StateHasChanged();
+            });
+        };
+        _endDebounceTimer.Start();
+    }
+
+    private string Truncate(string text, int max)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= max)
+            return text;
+        return text.Substring(0, max) + "...";
+    }
+
+    public void Dispose()
+    {
+        ViewModel.PropertyChanged -= OnViewModelChanged;
+        _startDebounceTimer?.Dispose();
+        _endDebounceTimer?.Dispose();
+    }
+}

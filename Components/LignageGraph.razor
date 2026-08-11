@@ -3,7 +3,37 @@
 
 <div id="@ContainerId" class="lignage-graph-container"></div>
 
+<!-- Debug: Afficher les données du graphe -->
+<details style="margin-top:10px; padding:10px; background:#f5f5f5; border-radius:5px;">
+    <summary style="cursor:pointer; font-weight:bold;">Debug: Données du graphe (@_linkCount liens, @_nodeCount noeuds)</summary>
+    <div style="max-height:300px; overflow-y:auto; font-size:12px;">
+        <h5>Noeuds (@_nodeCount)</h5>
+        <ul>
+            @foreach (var node in _debugNodes)
+            {
+                <li style="color:@node.Color">@node.Id</li>
+            }
+        </ul>
+        <h5>Liens (@_linkCount)</h5>
+        <ul>
+            @foreach (var link in _debugLinks)
+            {
+                <li>@link.From → @link.To</li>
+            }
+        </ul>
+    </div>
+</details>
+
 @code {
+    // Debug variables
+    private List<DebugNode> _debugNodes = new();
+    private List<DebugLink> _debugLinks = new();
+    private int _nodeCount => _debugNodes.Count;
+    private int _linkCount => _debugLinks.Count;
+
+    private class DebugNode { public string Id { get; set; } = ""; public string Color { get; set; } = ""; }
+    private class DebugLink { public string From { get; set; } = ""; public string To { get; set; } = ""; }
+
     [Parameter] public string CurrentNode { get; set; } = string.Empty;
     [Parameter] public List<LineageDto> Successors { get; set; } = new();
     [Parameter] public List<LineageDto> Predecessors { get; set; } = new();
@@ -26,13 +56,25 @@
         var nodes = new List<object>();
         var links = new List<object>();
         var nodeSet = new HashSet<string>();
+        var linkSet = new HashSet<string>(); // Pour éviter les doublons de liens
+
+        // Helper pour ajouter un lien sans doublon
+        void AddLink(string from, string to)
+        {
+            var linkKey = $"{from}|{to}";
+            if (!linkSet.Contains(linkKey) && from != to)
+            {
+                linkSet.Add(linkKey);
+                links.Add(new { from = from, to = to });
+            }
+        }
 
         // Current node (green)
         var currentNodeTrunc = Truncate(CurrentNode, 20);
         nodeSet.Add(currentNodeTrunc);
         nodes.Add(new { id = currentNodeTrunc, color = "#4CAF50", marker = new { radius = 25 } });
 
-        // Predecessors (blue)
+        // Predecessors du noeud actuel (blue)
         foreach (var p in Predecessors)
         {
             var pTrunc = Truncate(p.Node, 20);
@@ -41,10 +83,10 @@
                 nodeSet.Add(pTrunc);
                 nodes.Add(new { id = pTrunc, color = "#2196F3", marker = new { radius = 15 } });
             }
-            links.Add(new { from = pTrunc, to = currentNodeTrunc });
+            AddLink(pTrunc, currentNodeTrunc);
         }
 
-        // Successors (orange)
+        // Successors du noeud actuel (orange)
         foreach (var s in Successors)
         {
             var sTrunc = Truncate(s.Node, 20);
@@ -53,39 +95,69 @@
                 nodeSet.Add(sTrunc);
                 nodes.Add(new { id = sTrunc, color = "#FF9800", marker = new { radius = 15 } });
             }
-            links.Add(new { from = currentNodeTrunc, to = sTrunc });
+            AddLink(currentNodeTrunc, sTrunc);
         }
 
-        // History (gray)
+        // History: Parcourir chaque entrée et afficher ses successeurs/prédécesseurs
+        foreach (var entry in History)
+        {
+            var entryTrunc = Truncate(entry.Node, 20);
+
+            // Ajouter le noeud de l'historique s'il n'existe pas
+            if (!nodeSet.Contains(entryTrunc))
+            {
+                nodeSet.Add(entryTrunc);
+                nodes.Add(new { id = entryTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
+            }
+
+            // Ajouter les prédécesseurs de chaque entrée de l'historique (bleu clair)
+            if (entry.Predecessors != null)
+            {
+                foreach (var p in entry.Predecessors)
+                {
+                    var pTrunc = Truncate(p.Node, 20);
+                    if (!nodeSet.Contains(pTrunc))
+                    {
+                        nodeSet.Add(pTrunc);
+                        nodes.Add(new { id = pTrunc, color = "#90CAF9", marker = new { radius = 10 } });
+                    }
+                    AddLink(pTrunc, entryTrunc);
+                }
+            }
+
+            // Ajouter les successeurs de chaque entrée de l'historique (orange clair)
+            if (entry.Successors != null)
+            {
+                foreach (var s in entry.Successors)
+                {
+                    var sTrunc = Truncate(s.Node, 20);
+                    if (!nodeSet.Contains(sTrunc))
+                    {
+                        nodeSet.Add(sTrunc);
+                        nodes.Add(new { id = sTrunc, color = "#FFCC80", marker = new { radius = 10 } });
+                    }
+                    AddLink(entryTrunc, sTrunc);
+                }
+            }
+        }
+
+        // Liens entre les noeuds de l'historique (parcours)
         for (int i = 0; i < History.Count - 1; i++)
         {
             var fromTrunc = Truncate(History[i].Node, 20);
             var toTrunc = Truncate(History[i + 1].Node, 20);
-
-            if (!nodeSet.Contains(fromTrunc))
-            {
-                nodeSet.Add(fromTrunc);
-                nodes.Add(new { id = fromTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
-            }
-            if (!nodeSet.Contains(toTrunc))
-            {
-                nodeSet.Add(toTrunc);
-                nodes.Add(new { id = toTrunc, color = "#9E9E9E", marker = new { radius = 12 } });
-            }
-
-            // Check if link already exists
-            var linkExists = links.Cast<dynamic>().Any(l => l.from == fromTrunc && l.to == toTrunc);
-            if (!linkExists)
-            {
-                links.Add(new { from = fromTrunc, to = toTrunc });
-            }
+            AddLink(fromTrunc, toTrunc);
         }
+
+        // Remplir les variables de débogage
+        _debugNodes = nodes.Cast<dynamic>().Select(n => new DebugNode { Id = n.id, Color = n.color }).ToList();
+        _debugLinks = links.Cast<dynamic>().Select(l => new DebugLink { From = l.from, To = l.to }).ToList();
 
         return new
         {
-            chart = new { type = "networkgraph", height = 450 },
+            chart = new { type = "networkgraph", height = 500 },
             title = new { text = "Lineage Graph" },
-            subtitle = new { text = "Green: Current | Blue: Predecessors | Orange: Successors | Gray: History" },
+            subtitle = new { text = "Vert: Actuel | Bleu: Predecesseurs | Orange: Successeurs | Gris: Historique | Bleu/Orange clair: Liens historique" },
             plotOptions = new
             {
                 networkgraph = new
@@ -113,6 +185,7 @@
             {
                 new
                 {
+                    type = "networkgraph",
                     marker = new { radius = 15 },
                     dataLabels = new
                     {
@@ -123,12 +196,8 @@
                     },
                     link = new
                     {
-                        width = 2,
-                        marker = new
-                        {
-                            enabled = true,
-                            radius = 4
-                        }
+                        width = 3,
+                        color = "#333333"
                     },
                     data = links,
                     nodes = nodes

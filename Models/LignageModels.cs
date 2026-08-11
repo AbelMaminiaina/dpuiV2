@@ -107,3 +107,26 @@ public class ProgramDto
     public string Program { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Result of path finding between two nodes
+/// </summary>
+public class PathResult
+{
+    public bool PathExists { get; set; }
+    public List<PathStep> Steps { get; set; } = new();
+    public string StartNode { get; set; } = string.Empty;
+    public string EndNode { get; set; } = string.Empty;
+    public int TotalSteps => Steps.Count;
+}
+
+/// <summary>
+/// A step in the path
+/// </summary>
+public class PathStep
+{
+    public int Order { get; set; }
+    public string Node { get; set; } = string.Empty;
+    public string Transformation { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
+}

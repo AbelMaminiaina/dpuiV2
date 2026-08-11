@@ -214,4 +214,118 @@ public class LignageRepository : ILignageRepository
         using var connection = new SqlConnection(_connectionString);
         return await connection.QueryFirstOrDefaultAsync<ProgramDto>(sql, new { LanUid = lanUid });
     }
+
+    public async Task<List<NodeDto>> SearchNodesAsync(string searchTerm, int maxResults = 50)
+    {
+        string sql = @"
+            SELECT TOP (@MaxResults)
+                sub.LanUid + '|' + sub.LinUid + '|' + sub.EdgDir + '|D' AS Id,
+                sub.Node
+            FROM (
+                SELECT
+                    STUFF(
+                        CASE WHEN DTA_1 IS NOT NULL AND DTA_1 <> '' THEN '.' + DTA_1 ELSE '' END +
+                        CASE WHEN DTA_2 IS NOT NULL AND DTA_2 <> '' THEN '.' + DTA_2 ELSE '' END +
+                        CASE WHEN DTA_3 IS NOT NULL AND DTA_3 <> '' THEN '.' + DTA_3 ELSE '' END +
+                        CASE WHEN DTA_4 IS NOT NULL AND DTA_4 <> '' THEN '.' + DTA_4 ELSE '' END,
+                        1, 1, '') AS Node,
+                    LAN_UID AS LanUid,
+                    LIN_UID AS LinUid,
+                    EDG_DIR AS EdgDir,
+                    ROW_NUMBER() OVER (PARTITION BY
+                        STUFF(
+                            CASE WHEN DTA_1 IS NOT NULL AND DTA_1 <> '' THEN '.' + DTA_1 ELSE '' END +
+                            CASE WHEN DTA_2 IS NOT NULL AND DTA_2 <> '' THEN '.' + DTA_2 ELSE '' END +
+                            CASE WHEN DTA_3 IS NOT NULL AND DTA_3 <> '' THEN '.' + DTA_3 ELSE '' END +
+                            CASE WHEN DTA_4 IS NOT NULL AND DTA_4 <> '' THEN '.' + DTA_4 ELSE '' END,
+                            1, 1, '')
+                        ORDER BY LAN_UID, LIN_UID) AS rn
+                FROM LINE_VIS_EDG
+            ) sub
+            WHERE sub.rn = 1 AND sub.Node = @SearchTerm
+            ORDER BY sub.Node;";
+
+        using var connection = new SqlConnection(_connectionString);
+        var result = await connection.QueryAsync<NodeDto>(sql,
+            new { SearchTerm = searchTerm, MaxResults = maxResults });
+        return result.ToList();
+    }
+
+    public async Task<PathResult> FindPathAsync(string startNodeId, string endNodeId, int maxDepth = 20)
+    {
+        var result = new PathResult();
+
+        // Parse the node IDs to get node names
+        var startParts = startNodeId.Split('|');
+        var endParts = endNodeId.Split('|');
+
+        if (startParts.Length < 3 || endParts.Length < 3)
+        {
+            return result;
+        }
+
+        var startLanUid = Uri.UnescapeDataString(startParts[0]);
+        var startLinUid = Uri.UnescapeDataString(startParts[1]);
+        var startEdgDir = startParts[2];
+        var startUseEdg = startParts.Length > 3 && startParts[3] == "E";
+
+        var endLanUid = Uri.UnescapeDataString(endParts[0]);
+        var endLinUid = Uri.UnescapeDataString(endParts[1]);
+        var endEdgDir = endParts[2];
+        var endUseEdg = endParts.Length > 3 && endParts[3] == "E";
+
+        // Get start and end node names
+        var startRow = await GetByPKAsync(startLanUid, startLinUid, startEdgDir);
+        var endRow = await GetByPKAsync(endLanUid, endLinUid, endEdgDir);
+
+        if (startRow == null || endRow == null)
+        {
+            return result;
+        }
+
+        result.StartNode = startUseEdg ? startRow.LinkedNode : startRow.SourceNode;
+        result.EndNode = endUseEdg ? endRow.LinkedNode : endRow.SourceNode;
+
+        // Use optimized CTE stored procedure
+        using var connection = new SqlConnection(_connectionString);
+        var pathResults = await connection.QueryAsync<PathStepDto>(
+            "sp_FindPath",
+            new { StartNode = result.StartNode, EndNode = result.EndNode, MaxDepth = maxDepth },
+            commandType: System.Data.CommandType.StoredProcedure,
+            commandTimeout: 120
+        );
+
+        var steps = pathResults.ToList();
+
+        if (steps.Count > 0 && steps[0].PathExists == 1)
+        {
+            result.PathExists = true;
+            result.Steps = steps.Select(s => new PathStep
+            {
+                Order = s.StepOrder,
+                Node = CleanNodeName(s.NodeName),
+                Transformation = s.Transformation ?? "",
+                Id = s.NodeId ?? ""
+            }).ToList();
+        }
+
+        return result;
+    }
+
+    private string CleanNodeName(string nodeName)
+    {
+        if (string.IsNullOrEmpty(nodeName)) return nodeName;
+        // Remove trailing dots from node name (e.g., "DB.Schema.Table." -> "DB.Schema.Table")
+        return nodeName.TrimEnd('.');
+    }
+
+    // DTO for stored procedure result
+    private class PathStepDto
+    {
+        public int PathExists { get; set; }
+        public int StepOrder { get; set; }
+        public string NodeName { get; set; } = string.Empty;
+        public string? Transformation { get; set; }
+        public string? NodeId { get; set; }
+    }
 }

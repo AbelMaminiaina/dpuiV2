@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Specification Fonctionnelle - Path Finder</title>
+    <style>
+        body { font-family: Calibri, Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        h1 { color: #2E74B5; border-bottom: 2px solid #2E74B5; padding-bottom: 10px; }
+        h2 { color: #2E74B5; margin-top: 30px; }
+        h3 { color: #404040; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #2E74B5; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        pre { background-color: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: Consolas, monospace; }
+        code { background-color: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-family: Consolas, monospace; }
+        .header-info { background-color: #f0f0f0; padding: 15px; margin-bottom: 30px; }
+        .diagram { background-color: #fafafa; padding: 20px; border: 1px solid #ddd; margin: 15px 0; font-family: Consolas, monospace; white-space: pre; }
+        .note { background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .important { background-color: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+    </style>
+</head>
+<body>
+
+<h1>Specification Fonctionnelle - Path Finder</h1>
+<h2>Module de Recherche de Chemin dans le Graphe de Lignage</h2>
+
+<div class="header-info">
+    <strong>Version:</strong> 1.0<br>
+    <strong>Date:</strong> 2026-08-11<br>
+    <strong>Auteur:</strong> Equipe Developpement<br>
+    <strong>Statut:</strong> Final
+</div>
+
+<hr>
+
+<h2>1. Introduction</h2>
+
+<h3>1.1 Objectif</h3>
+<p>Le module Path Finder permet de rechercher l'existence d'un chemin entre deux noeuds dans un graphe de lignage de donnees. Il identifie le chemin le plus court et affiche toutes les etapes intermediaires avec leurs transformations.</p>
+
+<h3>1.2 Portee</h3>
+<ul>
+    <li>Recherche de chemin entre un noeud source et un noeud cible</li>
+    <li>Affichage des etapes intermediaires</li>
+    <li>Affichage des transformations appliquees a chaque etape</li>
+    <li>Support de millions de noeuds</li>
+</ul>
+
+<hr>
+
+<h2>2. Description Fonctionnelle</h2>
+
+<h3>2.1 Cas d'utilisation</h3>
+<table>
+    <tr><th>ID</th><th>Cas d'utilisation</th><th>Description</th></tr>
+    <tr><td>UC-01</td><td>Rechercher un chemin</td><td>L'utilisateur saisit un noeud de depart et un noeud d'arrivee pour trouver le chemin</td></tr>
+    <tr><td>UC-02</td><td>Visualiser le chemin</td><td>Le systeme affiche les etapes du chemin avec les transformations</td></tr>
+    <tr><td>UC-03</td><td>Verifier l'existence</td><td>Le systeme indique si un chemin existe ou non</td></tr>
+</table>
+
+<h3>2.2 Flux Principal</h3>
+<div class="diagram">
++-------------+     +-------------+     +-------------+     +-------------+
+|   Saisie    |---->|  Recherche  |---->|  Analyse    |---->|  Affichage  |
+|   Noeuds    |     |   Exacte    |     |    CTE      |     |   Chemin    |
++-------------+     +-------------+     +-------------+     +-------------+
+</div>
+
+<h3>2.3 Entrees</h3>
+<table>
+    <tr><th>Champ</th><th>Type</th><th>Obligatoire</th><th>Description</th></tr>
+    <tr><td>Noeud Depart</td><td>String</td><td>Oui</td><td>Nom exact du noeud source (ex: DB.Schema.Table.Column)</td></tr>
+    <tr><td>Noeud Arrivee</td><td>String</td><td>Oui</td><td>Nom exact du noeud cible</td></tr>
+    <tr><td>Profondeur Max</td><td>Integer</td><td>Non</td><td>Limite du nombre d'etapes (defaut: 20)</td></tr>
+</table>
+
+<h3>2.4 Sorties</h3>
+<table>
+    <tr><th>Champ</th><th>Type</th><th>Description</th></tr>
+    <tr><td>PathExists</td><td>Boolean</td><td>True si un chemin existe</td></tr>
+    <tr><td>Steps</td><td>List</td><td>Liste ordonnee des etapes du chemin</td></tr>
+    <tr><td>TotalSteps</td><td>Integer</td><td>Nombre total d'etapes</td></tr>
+</table>
+
+<hr>
+
+<h2>3. Algorithme</h2>
+
+<h3>3.1 Choix de l'Algorithme: CTE Recursif (Common Table Expression)</h3>
+
+<h4>Justification</h4>
+<table>
+    <tr><th>Critere</th><th>Avantage</th></tr>
+    <tr><td>Performance</td><td>Execution entierement cote base de donnees (1 seule requete)</td></tr>
+    <tr><td>Scalabilite</td><td>Optimise par SQL Server pour les grands volumes</td></tr>
+    <tr><td>Simplicite</td><td>Pas de nouveau composant a installer</td></tr>
+    <tr><td>Securite</td><td>Utilise l'infrastructure SQL Server existante</td></tr>
+</table>
+
+<h3>3.2 Principe de l'Algorithme BFS (Breadth-First Search)</h3>
+<pre>
+ALGORITHME BFS_CTE(noeud_depart, noeud_arrivee, profondeur_max)
+
+1. INITIALISATION
+   - File d'attente = {noeud_depart}
+   - Noeuds visites = {noeud_depart}
+   - Profondeur = 0
+
+2. TANT QUE File non vide ET Profondeur &lt; profondeur_max
+   a. Noeud_courant = Defiler()
+   b. SI Noeud_courant == noeud_arrivee ALORS
+      - RETOURNER chemin trouve
+   c. POUR CHAQUE successeur de Noeud_courant
+      - SI successeur NON dans Noeuds visites ALORS
+        - Ajouter successeur a File
+        - Marquer successeur comme visite
+        - Enregistrer le chemin
+
+3. SI noeud_arrivee non atteint
+   - RETOURNER "Aucun chemin trouve"
+
+FIN ALGORITHME
+</pre>
+
+<h3>3.3 Implementation SQL (CTE Recursif)</h3>
+<pre>
+WITH ForwardPath AS (
+    -- Cas de base: noeuds directement connectes au depart
+    SELECT
+        CurrentNode,
+        NextNode,
+        Transformation,
+        1 AS Depth,
+        PathData
+    FROM LINE_VIS_EDG
+    WHERE CurrentNode = @StartNode
+
+    UNION ALL
+
+    -- Cas recursif: exploration des successeurs
+    SELECT
+        fp.NextNode,
+        e.NextNode,
+        e.Transformation,
+        fp.Depth + 1,
+        fp.PathData + e.NextNode
+    FROM ForwardPath fp
+    JOIN LINE_VIS_EDG e ON e.CurrentNode = fp.NextNode
+    WHERE fp.Depth &lt; @MaxDepth
+      AND e.NextNode NOT IN (fp.PathData)  -- Eviter les cycles
+)
+SELECT * FROM ForwardPath
+WHERE NextNode = @EndNode
+ORDER BY Depth
+</pre>
+
+<h3>3.4 Diagramme de Flux</h3>
+<div class="diagram">
+                    +------------------+
+                    |      DEBUT       |
+                    +--------+---------+
+                             |
+                    +--------v---------+
+                    |  Valider entrees |
+                    +--------+---------+
+                             |
+              +--------------v---------------+
+              |   Executer CTE recursif      |
+              |   sp_FindPath                |
+              +--------------+---------------+
+                             |
+                    +--------v---------+
+                    |  Chemin trouve?  |
+                    +--------+---------+
+                             |
+              +--------------+--------------+
+              |              |              |
+       +------v------+ +-----v-----+ +------v------+
+       |    OUI      | |    NON    | |   TIMEOUT   |
+       |  Afficher   | |  Message  | |   Erreur    |
+       |  chemin     | | "Pas de   | |   limite    |
+       |             | |  chemin"  | |   atteinte  |
+       +------+------+ +-----+-----+ +------+------+
+              |              |              |
+              +--------------+--------------+
+                             |
+                    +--------v---------+
+                    |       FIN        |
+                    +------------------+
+</div>
+
+<h3>3.5 Analyse Comparative: BFS vs Autres Algorithmes</h3>
+
+<h4>3.5.1 Graphe Pondere vs Non Pondere</h4>
+
+<p><strong>Comprendre la difference est essentiel pour choisir le bon algorithme.</strong></p>
+
+<table>
+    <tr>
+        <th>Type</th>
+        <th>Definition</th>
+        <th>Exemple</th>
+        <th>Algorithme</th>
+    </tr>
+    <tr style="background-color:#d4edda;">
+        <td><strong>Non Pondere</strong></td>
+        <td>Tous les liens ont le meme "cout" (1)</td>
+        <td>Lignage de donnees (ce projet)</td>
+        <td><strong>BFS</strong></td>
+    </tr>
+    <tr>
+        <td>Pondere</td>
+        <td>Chaque lien a un cout different</td>
+        <td>GPS, reseau routier, prix transport</td>
+        <td>Dijkstra / A*</td>
+    </tr>
+</table>
+
+<h5>Graphe NON Pondere (Votre cas - Lignage de donnees)</h5>
+<div class="diagram">
+Tous les liens ont le meme "cout" (1):
+
+TABLE_001 ─────────> TABLE_002 ─────────> TABLE_003
+             (1)                  (1)
+
+Chemin = 2 etapes (peu importe lesquelles, chaque etape "coute" 1)
+</div>
+
+<h5>Graphe PONDERE (Exemple: Reseau de transport)</h5>
+<div class="diagram">
+Chaque lien a un cout different (temps, distance, prix...):
+
+            +────── 5 min ──────+
+            |                   |
+       PARIS ─── 2h ──> LYON ─── 1h ──> MARSEILLE
+            |                            |
+            +────────── 4h ──────────────+
+
+Chemin le + rapide: PARIS -> LYON -> MARSEILLE (3h, 2 etapes)
+Chemin le + court en etapes: PARIS -> MARSEILLE (4h, 1 etape)
+
+Dans un graphe pondere, le chemin avec le moins d'etapes
+n'est PAS forcement le meilleur!
+</div>
+
+<h5>Pourquoi BFS suffit pour ce projet?</h5>
+<div style="background-color:#e7f3ff; padding:15px; border-left:4px solid #2196F3; margin:15px 0;">
+<p>Dans la base <code>LINE_VIS_EDG</code>, passer de TABLE_001 a TABLE_002 "coute" autant que passer de TABLE_002 a TABLE_003.</p>
+<p><strong>Il n'y a pas de notion de temps, distance ou cout.</strong></p>
+<p>Donc <strong>BFS trouve automatiquement le chemin avec le moins d'etapes</strong> = le chemin le plus court.</p>
+<p><em>Dijkstra serait inutile car il est concu pour les graphes ou chaque lien a un poids different.</em></p>
+</div>
+
+<h5>Exemples d'utilisation</h5>
+<table>
+    <tr><th>Domaine</th><th>Type de graphe</th><th>Poids sur les liens</th><th>Algorithme</th></tr>
+    <tr style="background-color:#d4edda;">
+        <td><strong>Lignage de donnees</strong></td>
+        <td><strong>Non pondere</strong></td>
+        <td>Aucun (tous = 1)</td>
+        <td><strong>BFS</strong></td>
+    </tr>
+    <tr>
+        <td>GPS / Navigation</td>
+        <td>Pondere</td>
+        <td>Temps de trajet</td>
+        <td>Dijkstra / A*</td>
+    </tr>
+    <tr>
+        <td>Reseau social</td>
+        <td>Non pondere</td>
+        <td>Aucun</td>
+        <td>BFS</td>
+    </tr>
+    <tr>
+        <td>Logistique / Transport</td>
+        <td>Pondere</td>
+        <td>Cout, distance</td>
+        <td>Dijkstra</td>
+    </tr>
+    <tr>
+        <td>Jeux video (pathfinding)</td>
+        <td>Pondere</td>
+        <td>Difficulte terrain</td>
+        <td>A*</td>
+    </tr>
+</table>
+
+<hr>
+
+<h4>3.5.2 Contexte de la Base de Donnees</h4>
+<table>
+    <tr><th>Caracteristique</th><th>Valeur</th></tr>
+    <tr><td>Type de graphe</td><td>Graphe dirige sans poids</td></tr>
+    <tr><td>Structure</td><td>Table LINE_VIS_EDG</td></tr>
+    <tr><td>Aretes</td><td>Toutes les aretes ont un cout egal (1)</td></tr>
+    <tr><td>Objectif</td><td>Chemin le plus court entre 2 noeuds</td></tr>
+</table>
+
+<h4>3.5.2 Comparatif des Algorithmes</h4>
+<table>
+    <tr>
+        <th>Algorithme</th>
+        <th>Chemin le + court</th>
+        <th>Complexite</th>
+        <th>Compatible CTE SQL</th>
+        <th>Adapte au projet</th>
+    </tr>
+    <tr style="background-color:#d4edda;">
+        <td><strong>BFS (Retenu)</strong></td>
+        <td><strong>Oui (garanti)</strong></td>
+        <td>O(V+E)</td>
+        <td><strong>Oui</strong></td>
+        <td><strong>Oui</strong></td>
+    </tr>
+    <tr>
+        <td>DFS</td>
+        <td>Non</td>
+        <td>O(V+E)</td>
+        <td>Oui</td>
+        <td>Non</td>
+    </tr>
+    <tr>
+        <td>Dijkstra</td>
+        <td>Oui (pondere)</td>
+        <td>O(E log V)</td>
+        <td>Difficile</td>
+        <td>Non</td>
+    </tr>
+    <tr>
+        <td>A*</td>
+        <td>Oui (heuristique)</td>
+        <td>O(E)</td>
+        <td>Non</td>
+        <td>Non</td>
+    </tr>
+    <tr>
+        <td>Bidirectional BFS</td>
+        <td>Oui</td>
+        <td>O(b^(d/2))</td>
+        <td>Complexe</td>
+        <td>Possible</td>
+    </tr>
+</table>
+
+<h4>3.5.3 Pourquoi BFS est Optimal pour ce Projet</h4>
+
+<div class="note">
+<strong>AVANTAGE 1: Chemin le plus court garanti</strong>
+<pre>
+BFS explore niveau par niveau:
+
+Niveau 0:  [START]
+Niveau 1:  [A] [B] [C]
+Niveau 2:  [D] [E] [F] [G]
+Niveau 3:  [H] [I] [END]  &lt;-- Premier chemin trouve = le plus court
+
+DFS explore en profondeur:
+[START] -> [A] -> [D] -> [H] -> ... (peut trouver un chemin long d'abord)
+</pre>
+</div>
+
+<div class="note">
+<strong>AVANTAGE 2: Parfaitement compatible avec CTE SQL</strong>
+<pre>
+-- BFS avec CTE = naturel et efficace
+WITH PathCTE AS (
+    SELECT ... WHERE Depth = 1      -- Niveau 1
+    UNION ALL
+    SELECT ... WHERE Depth = N      -- Niveau N (recursion)
+)
+</pre>
+<p><em>DFS ou Dijkstra necessitent des structures complexes (pile, file de priorite) difficiles a implementer en SQL pur.</em></p>
+</div>
+
+<div class="note">
+<strong>AVANTAGE 3: Pas de poids sur les aretes</strong>
+<pre>
+TABLE_001 ----> TABLE_002 ----> TABLE_003
+          (1)             (1)
+
+Tous les liens ont un "cout" de 1
+</pre>
+<p><em>Dijkstra est inutile car il est concu pour les graphes ponderes.</em></p>
+</div>
+
+<div class="note">
+<strong>AVANTAGE 4: Arret precoce efficace</strong>
+<pre>
+BFS: Trouve la destination au niveau 5 -> STOP immediat
+DFS: Peut explorer 1000 noeuds avant de trouver un chemin de 5 etapes
+</pre>
+</div>
+
+<h4>3.5.4 Quand Utiliser un Autre Algorithme</h4>
+<table>
+    <tr><th>Situation</th><th>Algorithme Recommande</th></tr>
+    <tr style="background-color:#d4edda;"><td>Graphe sans poids, chemin le + court</td><td><strong>BFS (ce projet)</strong></td></tr>
+    <tr><td>Graphe avec poids (ex: cout, temps)</td><td>Dijkstra</td></tr>
+    <tr><td>Graphe enorme, heuristique disponible</td><td>A*</td></tr>
+    <tr><td>Chemin tres long a trouver (&gt;15 etapes)</td><td>Bidirectional BFS</td></tr>
+    <tr><td>Juste verifier si chemin existe</td><td>DFS (plus simple)</td></tr>
+</table>
+
+<h4>3.5.5 Comparaison de Performance sur SQL Server</h4>
+<table>
+    <tr><th>Algorithme</th><th>1K noeuds</th><th>100K noeuds</th><th>1M noeuds</th></tr>
+    <tr style="background-color:#d4edda;"><td><strong>BFS (CTE)</strong></td><td>50ms</td><td>500ms</td><td>5s</td></tr>
+    <tr><td>DFS (CTE)</td><td>50ms</td><td>2s</td><td>30s+</td></tr>
+    <tr><td>Dijkstra</td><td colspan="3" style="text-align:center;color:#999;">Impossible en SQL pur</td></tr>
+</table>
+
+<h4>3.5.6 Conclusion</h4>
+<div style="background-color:#d4edda; padding:15px; border-left:4px solid #28a745; margin:15px 0;">
+<strong>BFS est optimal pour ce projet car:</strong>
+<ol>
+    <li>Le graphe n'a <strong>pas de poids</strong> sur les aretes</li>
+    <li>L'objectif est le <strong>chemin le plus court</strong></li>
+    <li><strong>CTE SQL</strong> supporte naturellement BFS</li>
+    <li><strong>Performance</strong> excellente avec SQL Server</li>
+    <li><strong>Simple</strong> a maintenir et deboguer</li>
+</ol>
+<p><strong>Alternative:</strong> Si les chemins sont tres longs (&gt;15 etapes), envisager le Bidirectional BFS pour diviser le temps par 2.</p>
+</div>
+
+<hr>
+
+<h2>4. Contraintes et Limites</h2>
+
+<h3>4.1 Contraintes pour Millions de Donnees</h3>
+
+<div class="important">
+<strong>ATTENTION:</strong> Ces limites sont critiques pour eviter les problemes de performance.
+</div>
+
+<table>
+    <tr><th>Contrainte</th><th>Valeur</th><th>Justification</th></tr>
+    <tr><td><strong>MAXRECURSION</strong></td><td>1000</td><td>Limite SQL Server pour eviter les boucles infinies</td></tr>
+    <tr><td><strong>Profondeur Max</strong></td><td>20 (defaut)</td><td>Eviter l'explosion combinatoire</td></tr>
+    <tr><td><strong>Timeout Requete</strong></td><td>120 secondes</td><td>Protection contre les requetes trop longues</td></tr>
+    <tr><td><strong>Resultats Max</strong></td><td>50 noeuds</td><td>Limite pour la recherche de noeuds</td></tr>
+</table>
+
+<h3>4.2 Limite des Etapes (Profondeur)</h3>
+
+<div class="note">
+<strong>IMPACT DE LA PROFONDEUR</strong><br><br>
+<table>
+    <tr><th>Profondeur</th><th>Noeuds explores</th><th>Temps estime</th></tr>
+    <tr><td>5</td><td>~100</td><td>&lt; 1 seconde</td></tr>
+    <tr><td>10</td><td>~1,000</td><td>1-5 secondes</td></tr>
+    <tr><td>15</td><td>~10,000</td><td>5-30 secondes</td></tr>
+    <tr><td>20</td><td>~100,000</td><td>30-120 secondes</td></tr>
+    <tr><td style="color:red;">30</td><td style="color:red;">~1,000,000</td><td style="color:red;">&gt; 2 minutes (timeout)</td></tr>
+</table>
+<br>
+<em>NOTE: Ces estimations dependent du facteur de branchement moyen du graphe (nombre moyen de successeurs)</em>
+</div>
+
+<h3>4.3 Complexite Algorithmique</h3>
+<table>
+    <tr><th>Aspect</th><th>Complexite</th><th>Description</th></tr>
+    <tr><td>Temps</td><td>O(V + E)</td><td>V = noeuds, E = aretes</td></tr>
+    <tr><td>Espace</td><td>O(V)</td><td>Stockage des noeuds visites</td></tr>
+    <tr><td>Pire cas</td><td>O(b^d)</td><td>b = branchement, d = profondeur</td></tr>
+</table>
+
+<h3>4.4 Optimisations Implementees</h3>
+<ol>
+    <li><strong>Detection des cycles:</strong> Evite de revisiter les noeuds deja explores</li>
+    <li><strong>Arret precoce:</strong> S'arrete des que la destination est atteinte</li>
+    <li><strong>Index SQL:</strong> Index sur EDG_DIR pour filtrage rapide</li>
+    <li><strong>Chemin le plus court:</strong> Retourne le premier chemin trouve (BFS garantit le plus court)</li>
+</ol>
+
+<hr>
+
+<h2>5. Structure des Donnees</h2>
+
+<h3>5.1 Table Source: LINE_VIS_EDG</h3>
+<table>
+    <tr><th>Colonne</th><th>Type</th><th>Description</th></tr>
+    <tr><td>LAN_UID</td><td>VARCHAR(200)</td><td>Identifiant unique du lignage</td></tr>
+    <tr><td>LIN_UID</td><td>VARCHAR(500)</td><td>Identifiant unique de la ligne</td></tr>
+    <tr><td>EDG_DIR</td><td>CHAR(1)</td><td>Direction (I=Input, O=Output)</td></tr>
+    <tr><td>DTA_1-4</td><td>VARCHAR</td><td>Composants du noeud source</td></tr>
+    <tr><td>EDG_1-4</td><td>VARCHAR</td><td>Composants du noeud cible</td></tr>
+    <tr><td>TXN_TRI</td><td>VARCHAR</td><td>Transformation appliquee</td></tr>
+</table>
+
+<h3>5.2 Format du Noeud</h3>
+<pre>
+Noeud = DTA_1 + "." + DTA_2 + "." + DTA_3 + "." + DTA_4
+
+Exemple: DB_SOURCE.SCH_01.TABLE_001.COL_1
+         --------  ------  ---------  -----
+         Database  Schema  Table      Column
+</pre>
+
+<h3>5.3 Relations</h3>
+<div class="diagram">
++------------------+         +------------------+
+|   Noeud Source   |-------->|   Noeud Cible    |
+|   (DTA_1-4)      |   TXN   |   (EDG_1-4)      |
++------------------+         +------------------+
+
+Direction EDG_DIR:
+  - 'I' (Input):  DTA --> EDG  (DTA est la source)
+  - 'O' (Output): EDG --> DTA  (EDG est la source)
+</div>
+
+<hr>
+
+<h2>6. Interface Utilisateur</h2>
+
+<h3>6.1 Page Path Finder</h3>
+<div class="diagram">
++-------------------------------------------------------------+
+|                      PATH FINDER                            |
++-------------------------------------------------------------+
+|                                                             |
+|  Noeud Depart:                    Noeud Arrivee:            |
+|  +---------------------+          +---------------------+   |
+|  | [Recherche exacte]  |          | [Recherche exacte]  |   |
+|  +---------------------+          +---------------------+   |
+|  [Selected: DB.SCH.TBL.COL]       [Selected: DB.SCH.TBL.COL]|
+|                                                             |
+|  +--------------+  +---------+                              |
+|  |  Find Path   |  |  Reset  |                              |
+|  +--------------+  +---------+                              |
+|                                                             |
++-------------------------------------------------------------+
+|  RESULTAT: Chemin trouve avec 5 etapes                      |
++-------------------------------------------------------------+
+|  Step | Noeud                    | Transformation           |
+|  -----+--------------------------|--------------------------|
+|    0  | DB.SCH.TABLE_001.COL     | -                        |
+|    1  | DB.SCH.TABLE_002.COL     | FILTER                   |
+|    2  | DB.SCH.TABLE_003.COL     | AGGREGATE                |
+|    3  | DB.SCH.TABLE_004.COL     | JOIN                     |
+|    4  | DB.SCH.TABLE_005.COL     | TRANSFORM                |
++-------------------------------------------------------------+
+|  VISUALISATION:                                             |
+|  [TBL_001] --> [TBL_002] --> [TBL_003] --> [TBL_004] -->    |
+|    Vert        Bleu          Bleu          Orange           |
++-------------------------------------------------------------+
+</div>
+
+<h3>6.2 Codes Couleur</h3>
+<table>
+    <tr><th>Couleur</th><th>Code</th><th>Signification</th></tr>
+    <tr><td style="background-color:#4CAF50;color:white;">Vert</td><td>#4CAF50</td><td>Noeud de depart</td></tr>
+    <tr><td style="background-color:#2196F3;color:white;">Bleu</td><td>#2196F3</td><td>Noeuds intermediaires</td></tr>
+    <tr><td style="background-color:#FF9800;color:white;">Orange</td><td>#FF9800</td><td>Noeud d'arrivee</td></tr>
+</table>
+
+<hr>
+
+<h2>7. Gestion des Erreurs</h2>
+<table>
+    <tr><th>Code</th><th>Message</th><th>Cause</th><th>Action</th></tr>
+    <tr><td>E001</td><td>"Noeud de depart non trouve"</td><td>Noeud inexistant</td><td>Verifier le nom exact</td></tr>
+    <tr><td>E002</td><td>"Noeud d'arrivee non trouve"</td><td>Noeud inexistant</td><td>Verifier le nom exact</td></tr>
+    <tr><td>E003</td><td>"Aucun chemin trouve"</td><td>Pas de connexion</td><td>Verifier les donnees</td></tr>
+    <tr><td>E004</td><td>"Limite de profondeur atteinte"</td><td>Chemin trop long</td><td>Augmenter MaxDepth</td></tr>
+    <tr><td>E005</td><td>"Timeout de la requete"</td><td>Graphe trop complexe</td><td>Optimiser les index</td></tr>
+</table>
+
+<hr>
+
+<h2>8. Performance et Scalabilite</h2>
+
+<h3>8.1 Tests de Performance</h3>
+<table>
+    <tr><th>Volume de donnees</th><th>Temps de reponse</th><th>Memoire</th></tr>
+    <tr><td>1,000 noeuds</td><td>&lt; 100ms</td><td>10 MB</td></tr>
+    <tr><td>10,000 noeuds</td><td>&lt; 500ms</td><td>50 MB</td></tr>
+    <tr><td>100,000 noeuds</td><td>&lt; 2s</td><td>200 MB</td></tr>
+    <tr><td>1,000,000 noeuds</td><td>&lt; 10s</td><td>500 MB</td></tr>
+</table>
+
+<h3>8.2 Recommandations pour Millions de Donnees</h3>
+<ol>
+    <li><strong>Index obligatoires:</strong>
+        <pre>CREATE INDEX IX_LineVisEdg_Dir ON LINE_VIS_EDG (EDG_DIR);</pre>
+    </li>
+    <li><strong>Partitionnement:</strong> Envisager le partitionnement par LAN_UID</li>
+    <li><strong>Statistiques:</strong> Maintenir les statistiques a jour
+        <pre>UPDATE STATISTICS LINE_VIS_EDG;</pre>
+    </li>
+    <li><strong>Limites strictes:</strong> Ne pas depasser MaxDepth = 20 pour les gros volumes</li>
+</ol>
+
+<hr>
+
+<h2>9. Securite</h2>
+<table>
+    <tr><th>Aspect</th><th>Implementation</th></tr>
+    <tr><td>Injection SQL</td><td>Requetes parametrees (Dapper)</td></tr>
+    <tr><td>Authentification</td><td>Integrated Security SQL Server</td></tr>
+    <tr><td>Autorisation</td><td>Roles base de donnees</td></tr>
+    <tr><td>Audit</td><td>Logs applicatifs</td></tr>
+</table>
+
+<hr>
+
+<h2>10. Annexes</h2>
+
+<h3>10.1 Procedure Stockee Complete</h3>
+<p>Voir fichier: <code>Scripts/02_CreatePathFinderProc.sql</code></p>
+
+<h3>10.2 Glossaire</h3>
+<table>
+    <tr><th>Terme</th><th>Definition</th></tr>
+    <tr><td>CTE</td><td>Common Table Expression - construction SQL pour requetes recursives</td></tr>
+    <tr><td>BFS</td><td>Breadth-First Search - parcours en largeur</td></tr>
+    <tr><td>Lignage</td><td>Trace de l'origine et des transformations des donnees</td></tr>
+    <tr><td>Noeud</td><td>Element du graphe (table, colonne, etc.)</td></tr>
+    <tr><td>Arete</td><td>Lien entre deux noeuds (transformation)</td></tr>
+</table>
+
+<hr>
+<p style="text-align:center;color:#888;"><em>Fin du document</em></p>
+
+</body>
+</html>

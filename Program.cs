@@ -25,6 +25,7 @@ builder.Services.AddScoped<IConsultationService, ConsultationService>();
 // ViewModels
 builder.Services.AddScoped<NodesListViewModel>();
 builder.Services.AddScoped<ConsultationViewModel>();
+builder.Services.AddScoped<PathFinderViewModel>();
 
 var app = builder.Build();
 

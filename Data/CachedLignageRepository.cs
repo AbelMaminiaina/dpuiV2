@@ -69,4 +69,16 @@ public class CachedLignageRepository : ILignageRepository
             _cache.Set(key, program, TimeSpan.FromMinutes(30));
         return program;
     }
+
+    public async Task<List<NodeDto>> SearchNodesAsync(string searchTerm, int maxResults = 50)
+    {
+        // No caching for search - results depend on search term
+        return await _repository.SearchNodesAsync(searchTerm, maxResults);
+    }
+
+    public async Task<PathResult> FindPathAsync(string startNodeId, string endNodeId, int maxDepth = 20)
+    {
+        // No caching for path finding - can be expensive but results vary
+        return await _repository.FindPathAsync(startNodeId, endNodeId, maxDepth);
+    }
 }
